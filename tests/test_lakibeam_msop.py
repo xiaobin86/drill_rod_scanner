@@ -137,15 +137,20 @@ def test_parse_short_packet_returns_empty():
 
 
 def test_scan_to_xy_conversion():
-    # 手册示例：0x08FC = 2300mm = 2.3m，角度 0°
+    # 手册示例：0x08FC = 2300mm = 2.3m，角度 0°（雷达正前方 +x）
     pts = [ScanPoint(angle=0.0, dist_mm=2300, rssi=49)]
     xy = scan_to_xy(pts)
     np.testing.assert_allclose(xy[0], [2.3, 0.0, 0.0], atol=1e-9)
 
-    # 角度 90° -> (0, r, 0)
+    # 角度 90°（逆时针转，指向右侧 +z）
     pts = [ScanPoint(angle=90.0, dist_mm=1000, rssi=10)]
     xy = scan_to_xy(pts)
-    np.testing.assert_allclose(xy[0], [0.0, 1.0, 0.0], atol=1e-9)
+    np.testing.assert_allclose(xy[0], [0.0, 0.0, 1.0], atol=1e-9)
+
+    # 指定扫描高度：y 轴朝天
+    pts = [ScanPoint(angle=0.0, dist_mm=1000, rssi=10)]
+    xy = scan_to_xy(pts, height_m=0.5)
+    np.testing.assert_allclose(xy[0], [1.0, 0.5, 0.0], atol=1e-9)
 
 
 def test_scan_to_xy_empty():

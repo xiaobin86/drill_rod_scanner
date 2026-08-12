@@ -34,7 +34,28 @@ python scripts/lakibeam_viewer.py --lidar-ip 192.168.198.2 --port 2368
 ```
 
 常用参数：`--port`（接收端口，需与雷达配置一致）、`--max-range`（最大距离过滤）、
-`--min-rssi`（回波强度过滤）、`--z`（扫描平面高度）。Ctrl+C 退出。
+`--min-rssi`（回波强度过滤）、`--height`（扫描平面高度）。Ctrl+C 退出。
+
+## 舵机旋转扫描 + 点云拼接显示
+
+舵机带动雷达逐步旋转，每个位置采一圈点云，按舵机角度旋转拼接为 3D 点云，
+Open3D 黑底绿点实时显示：
+
+```bash
+conda activate drill_rod_scanner
+python scripts/servo_sweep_scan.py \
+  --port /dev/ttyUSB0 --start 500 --end 1000 --step 10 --interval 2 \
+  --axis z --angle-start 0 --angle-end 180
+```
+
+参数说明：
+- `--start/--end/--step`：舵机位置 P 值范围与增量（对应 `servo_sweep_demo.py`）
+- `--interval`：每个位置停留秒数（等雷达采完一圈）
+- `--axis`：点云绕哪个轴旋转拼接，**取决于舵机实际安装方向**（x/y/z）
+- `--angle-start/--angle-end`：start/end 位置对应的旋转角度（度）
+- `--dry-run`：只打印舵机指令，不连串口（可先验证指令格式）
+
+雷达坐标系：x 向前、z 向右、y 朝天（扫描平面为 x-z 水平面）。
 
 ## 测试
 
