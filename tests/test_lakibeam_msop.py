@@ -3,12 +3,20 @@
 构造符合协议的手工 UDP 包，验证解析逻辑。
 """
 
+import socket
 import struct
+import threading
+import time
 
 import numpy as np
 import pytest
 
-from scripts.lakibeam_viewer import MSOPParser, ScanPoint, scan_to_xy
+from scripts.lakibeam_viewer import (
+    LakiBeamViewer,
+    MSOPParser,
+    ScanPoint,
+    scan_to_xy,
+)
 
 # 协议常量
 DATA_FLAG = 0xEEFF
@@ -142,3 +150,43 @@ def test_scan_to_xy_conversion():
 
 def test_scan_to_xy_empty():
     assert scan_to_xy([]).shape == (0, 3)
+
+
+def test_receive_scan_loopback():
+    """回环集成测试：本地模拟雷达发一圈数据，验证 receive_scan 收满一圈。
+
+    模拟真实数据流：每包首块方位角递增 48°，跨过 360° 后回绕。
+    不依赖真实硬件，走完 socket 绑定 → recvfrom → 解析 → 一圈判定全链路。
+    """
+    # 找空闲端口
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    probe.bind(("127.0.0.1", 0))
+    port = probe.getsockname()[1]
+    probe.close()
+
+    viewer = LakiBeamViewer(host_ip="127.0.0.1", port=port)
+    viewer.connect()
+
+    # 模拟 8 个包：首块方位角 0, 48, ..., 336，然后回绕到 24（< 336 触发一圈判定）
+    az_starts = [0.0, 48.0, 96.0, 144.0, 192.0, 240.0, 288.0, 336.0, 24.0]
+
+    def sender() -> None:
+        time.sleep(0.1)  # 等接收端绑定完成
+        for start in az_starts:
+            block_az = [start + i * 4.0 for i in range(12)]
+            packet = build_msop_packet(block_az, dist_mm=2300, rssi=49)
+            viewer.sock.sendto(packet, ("127.0.0.1", port))
+            time.sleep(0.01)
+
+    t = threading.Thread(target=sender)
+    t.start()
+    scan = viewer.receive_scan()
+    t.join()
+    viewer.close()
+
+    assert scan is not None
+    # 回绕判定应在前 8 包数据后、第 9 包（回绕）时结束，至少收满 8×192 点
+    assert len(scan) >= 8 * 192
+    angles = [p.angle for p in scan]
+    assert min(angles) < 10.0
+    assert max(angles) > 350.0

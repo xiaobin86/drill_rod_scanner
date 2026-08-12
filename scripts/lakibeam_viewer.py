@@ -34,6 +34,7 @@ from __future__ import annotations
 import argparse
 import socket
 import struct
+import time
 from dataclasses import dataclass
 
 import numpy as np
@@ -117,6 +118,16 @@ class MSOPParser:
         return points
 
 
+def first_block_azimuth(packet: bytes) -> float | None:
+    """读取包内第 0 个 Data Block 的方位角（度）；无效包返回 None。"""
+    if len(packet) < MSOP_PACKET_SIZE:
+        return None
+    flag = struct.unpack_from("<H", packet, 0)[0]
+    if flag != DATA_FLAG:
+        return None
+    return struct.unpack_from("<H", packet, 2)[0] / 100.0
+
+
 def scan_to_xy(points: list[ScanPoint], z: float = 0.0) -> np.ndarray:
     """将一圈测距点转换为 (n,3) 直角坐标点云。
 
@@ -146,12 +157,14 @@ class LakiBeamViewer:
         z: float = 0.0,
         min_rssi: int = 0,
         max_range_m: float = 50.0,
+        debug: bool = False,
     ) -> None:
         self.host_ip = host_ip
         self.port = port
         self.z = z
         self.min_rssi = min_rssi
         self.max_range_m = max_range_m
+        self.debug = debug
         self.sock: socket.socket | None = None
 
     def connect(self) -> None:
@@ -164,31 +177,43 @@ class LakiBeamViewer:
         print("提示: 确保雷达已启动测距（Web 配置页 laser_enable=True），且向本机端口发送数据")
 
     def receive_scan(self) -> list[ScanPoint] | None:
-        """接收数据直到集齐一圈（Azimuth 重新回到起点即为一圈）。
+        """接收数据直到集齐一圈（方位角回绕判定），超时返回 None。
 
-        返回一圈的有效点列表；超时返回 None。
+        一圈判定：当前包首块方位角 < 上一包首块方位角，即跨过 360° 边界
+        （不依赖从 0° 起扫的假设）。2 秒内无回绕则返回已收集数据防挂起。
         """
         if self.sock is None:
             raise RuntimeError("未连接，请先调用 connect()")
 
         all_points: list[ScanPoint] = []
-        seen_azimuth_zero = False
+        prev_azimuth: float | None = None
+        start = time.monotonic()
+
         while True:
             try:
                 packet, _addr = self.sock.recvfrom(65535)
             except socket.timeout:
+                if all_points:
+                    return all_points  # 超时但有数据，返回已收集
                 return None
 
             points = MSOPParser.parse_packet(packet)
             all_points.extend(points)
 
-            # 一圈结束标志：包内 Azimuth 回到起点（0° 附近）
-            if points and points[0].angle < 1.0:
-                if seen_azimuth_zero:
-                    break
-                seen_azimuth_zero = True
+            az = first_block_azimuth(packet)
+            if self.debug:
+                print(f"  [debug] 包 {len(packet)}B, 首块方位角 {az}, 解析 {len(points)} 点")
+            if az is not None and prev_azimuth is not None and az < prev_azimuth:
+                if self.debug:
+                    print(f"  [debug] 检测到回绕 {prev_azimuth} -> {az}，一圈完成")
+                return all_points
+            if az is not None:
+                prev_azimuth = az
 
-        return all_points
+            if time.monotonic() - start > 2.0:
+                if self.debug:
+                    print("  [debug] 2 秒未检测到回绕，返回已收集数据")
+                return all_points or None
 
     def visualize(self, fps: int = 20) -> None:
         """Open3D 实时可视化循环，Ctrl+C 或关窗退出。"""
@@ -254,6 +279,8 @@ def main() -> None:
                         help="最大显示距离（米）")
     parser.add_argument("--fps", type=int, default=20,
                         help="打印帧信息的频率")
+    parser.add_argument("--debug", action="store_true",
+                        help="打印每个 UDP 包的诊断信息（字节数/方位角/解析点数）")
     args = parser.parse_args()
 
     print(f"目标雷达: {args.lidar_ip}")
@@ -263,6 +290,7 @@ def main() -> None:
         z=args.z,
         min_rssi=args.min_rssi,
         max_range_m=args.max_range,
+        debug=args.debug,
     )
     viewer.connect()
     viewer.visualize(fps=args.fps)
