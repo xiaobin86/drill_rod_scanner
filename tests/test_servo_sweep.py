@@ -50,3 +50,17 @@ def test_servo_pos_to_angle_mapping():
 def test_servo_pos_to_angle_flat_range():
     # start == end 时返回 angle_start，不除零
     assert servo_pos_to_angle(500, 500, 500, 30.0, 60.0) == 30.0
+
+
+def test_turntable_aggregation_axis_y():
+    """转盘绕世界 z（竖直）旋转 = 雷达系 y 轴，验证扫描弧绕 y 轴聚合。
+
+    雷达横装扫描弧在 x-y 竖直平面：前方点 (1,0,0) 绕 y 轴转 90° 后
+    应转到 z 方向（水平），y 分量不变——即竖直弧绕竖直轴扫出水平扇面。
+    """
+    pts = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+    out = rotate_points(pts, "y", 90.0)
+    # (1,0,0) -> (0,0,-1)：前方点转到 -z（水平方向）
+    np.testing.assert_allclose(out[0], [0.0, 0.0, -1.0], atol=1e-9)
+    # (0,1,0) 在旋转轴上不变（竖直轴不随转盘旋转）
+    np.testing.assert_allclose(out[1], [0.0, 1.0, 0.0], atol=1e-9)

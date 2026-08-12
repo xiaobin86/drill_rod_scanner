@@ -142,15 +142,15 @@ def test_scan_to_xy_conversion():
     xy = scan_to_xy(pts)
     np.testing.assert_allclose(xy[0], [2.3, 0.0, 0.0], atol=1e-9)
 
-    # 角度 90°（逆时针转，指向右侧 +z）
+    # 角度 90°（横装，扫描弧在 x-y 竖直平面，逆时针转向 +y 上方）
     pts = [ScanPoint(angle=90.0, dist_mm=1000, rssi=10)]
     xy = scan_to_xy(pts)
-    np.testing.assert_allclose(xy[0], [0.0, 0.0, 1.0], atol=1e-9)
+    np.testing.assert_allclose(xy[0], [0.0, 1.0, 0.0], atol=1e-9)
 
-    # 指定扫描高度：y 轴朝天
+    # 指定安装 z 偏移（横向安装相对转盘轴）
     pts = [ScanPoint(angle=0.0, dist_mm=1000, rssi=10)]
-    xy = scan_to_xy(pts, height_m=0.5)
-    np.testing.assert_allclose(xy[0], [1.0, 0.5, 0.0], atol=1e-9)
+    xy = scan_to_xy(pts, offset_z_m=0.5)
+    np.testing.assert_allclose(xy[0], [1.0, 0.0, 0.5], atol=1e-9)
 
 
 def test_scan_to_xy_empty():

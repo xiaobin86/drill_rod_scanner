@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
-"""舵机旋转扫描 + LakiBeam 点云拼接实时显示。
+"""舵机转盘扫描 + LakiBeam 点云拼接实时显示。
 
-流程: 舵机从 start 位置逐步旋转到 end 位置, 每个位置等雷达采一圈 2D 点云,
-按舵机位置映射的角度绕旋转轴旋转后拼入累计点云, Open3D 黑色背景绿色点实时显示。
+流程: 舵机带动转盘从 start 位置逐步旋转到 end 位置, 每个位置等雷达采一圈 2D 点云,
+按转盘角度绕世界 z 轴（竖直）旋转后拼入累计点云, Open3D 黑色背景绿色点实时显示。
 
 坐标系约定:
-  雷达系 (横装): x 向前, y 朝天, z 向右, 扫描平面为 x-z 水平面 (y 固定为扫描高度)。
-  世界系: 与雷达初始位姿对齐。舵机绕世界坐标 z 轴旋转雷达 (水平横向轴),
-  扫描平面随之翻转, 扫过不同高度, 拼接得到 3D 点云。因此默认 --axis z。
+  雷达横装: x 向前, y 朝上, z 向右; 自转扫描弧在 x-y 竖直平面。
+  世界系: z 轴竖直（转盘旋转轴）, 与雷达系 y 轴同向。
+  转盘绕世界 z 轴水平旋转, 把不同时刻的竖直扫描弧聚合成 3D 扫描面。
+  因此拼接旋转轴默认 --axis y（= 世界 z）。
 
 用法:
   python scripts/servo_sweep_scan.py                          # 默认 500->1000, 步进10
   python scripts/servo_sweep_scan.py --port /dev/ttyUSB0 --start 100 --end 300 --step 20
-  python scripts/servo_sweep_scan.py --axis z --angle-start 0 --angle-end 180
+  python scripts/servo_sweep_scan.py --axis y --angle-start 0 --angle-end 180
   python scripts/servo_sweep_scan.py --dry-run                # 不连串口, 只打印指令
 """
 
@@ -76,14 +77,15 @@ def main() -> None:
     parser.add_argument("--interval", type=float, default=2.0, help="每个位置停留秒数")
     parser.add_argument("--move-time", type=int, default=2000, help="舵机移动耗时 T（ms）")
     parser.add_argument("--servo-id", type=int, default=0, help="舵机 ID")
-    parser.add_argument("--axis", default="z", choices=["x", "y", "z"],
-                        help="点云旋转轴（默认 z，取决于舵机安装方向）")
+    parser.add_argument("--axis", default="y", choices=["x", "y", "z"],
+                        help="点云旋转轴（默认 y = 世界 z 竖直转盘轴）")
     parser.add_argument("--angle-start", type=float, default=0.0,
                         help="start 位置对应的旋转角度（度）")
     parser.add_argument("--angle-end", type=float, default=180.0,
                         help="end 位置对应的旋转角度（度）")
     parser.add_argument("--lidar-port", type=int, default=2368, help="雷达数据端口")
-    parser.add_argument("--height", type=float, default=0.0, help="雷达扫描高度（米）")
+    parser.add_argument("--offset-z", type=float, default=0.0,
+                        help="雷达安装 z 偏移（米，相对转盘轴）")
     parser.add_argument("--max-range", type=float, default=50.0, help="最大显示距离（米）")
     parser.add_argument("--dry-run", action="store_true", help="只打印舵机指令不连串口")
     parser.add_argument("--debug", action="store_true", help="打印每包诊断信息")
@@ -123,7 +125,7 @@ def main() -> None:
                 print(f"  [skip] 位置 {pos}: 雷达无数据")
                 continue
 
-            frame = scan_to_xy(scan, height_m=args.height)
+            frame = scan_to_xy(scan, offset_z_m=args.offset_z)
             dist = np.linalg.norm(frame[:, :2], axis=1)
             frame = frame[dist <= args.max_range]
 
@@ -134,6 +136,7 @@ def main() -> None:
             cloud = np.vstack(accumulated)
             print(f"  [scan] pos={pos} angle={angle:.1f}° 帧 {len(rotated)} 点, 累计 {len(cloud)} 点")
 
+            # 点数每帧增长，必须 remove+add 刷新渲染缓冲，否则 Open3D 卡死
             pcd.points = o3d.utility.Vector3dVector(cloud)
             pcd.colors = o3d.utility.Vector3dVector(
                 np.tile([0.0, 1.0, 0.0], (len(cloud), 1))  # 绿色点
@@ -146,8 +149,10 @@ def main() -> None:
                 ctr.set_lookat([0.0, 0.0, 0.0])
                 geometry_added = True
             else:
-                vis.update_geometry(pcd)
+                vis.remove_geometry(pcd, reset_bounding_box=False)
+                vis.add_geometry(pcd, reset_bounding_box=False)
             vis.update_renderer()
+            vis.poll_events()
 
         print(f"\n扫描完成: {len(accumulated)} 帧, 累计 {len(cloud) if accumulated else 0} 点")
         print("窗口保持打开, 可鼠标旋转/缩放查看, Ctrl+C 或关窗退出")

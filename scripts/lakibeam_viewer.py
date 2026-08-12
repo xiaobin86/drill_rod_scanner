@@ -128,11 +128,11 @@ def first_block_azimuth(packet: bytes) -> float | None:
     return struct.unpack_from("<H", packet, 2)[0] / 100.0
 
 
-def scan_to_xy(points: list[ScanPoint], height_m: float = 0.0) -> np.ndarray:
+def scan_to_xy(points: list[ScanPoint], offset_z_m: float = 0.0) -> np.ndarray:
     """将一圈测距点转换为 (n,3) 直角坐标点云。
 
-    雷达横装：x 向前，z 向右，y 朝天。2D 扫描平面为水平面（x-z 平面），
-    y = height_m 为扫描高度。0° 指向雷达正前方（+x），逆时针转向 +z。
+    雷达横装（x 向前、y 朝上、z 向右）：自转扫描弧在 x-y 竖直平面，
+    0° 指向 +x（正前方），逆时针转向 +y（上方）。z = offset_z_m 为安装偏移。
     距离单位 mm -> m。
     """
     if not points:
@@ -141,9 +141,9 @@ def scan_to_xy(points: list[ScanPoint], height_m: float = 0.0) -> np.ndarray:
     dists = np.array([p.dist_mm for p in points], dtype=np.float64) / 1000.0
     thetas = np.deg2rad(angles)
     return np.column_stack([
-        dists * np.cos(thetas),                       # x 向前
-        np.full(len(points), height_m, dtype=np.float64),  # y 朝天
-        dists * np.sin(thetas),                       # z 向右
+        dists * np.cos(thetas),                        # x 向前
+        dists * np.sin(thetas),                        # y 朝上（竖直扫描弧）
+        np.full(len(points), offset_z_m, dtype=np.float64),  # z 向右（安装偏移）
     ])
 
 
@@ -154,14 +154,14 @@ class LakiBeamViewer:
         self,
         host_ip: str = "0.0.0.0",
         port: int = 2368,
-        height_m: float = 0.0,
+        offset_z_m: float = 0.0,
         min_rssi: int = 0,
         max_range_m: float = 50.0,
         debug: bool = False,
     ) -> None:
         self.host_ip = host_ip
         self.port = port
-        self.height_m = height_m
+        self.offset_z_m = offset_z_m
         self.min_rssi = min_rssi
         self.max_range_m = max_range_m
         self.debug = debug
@@ -231,7 +231,7 @@ class LakiBeamViewer:
                 if scan is None:
                     continue  # 超时无数据，继续等
 
-                pts = scan_to_xy(scan, height_m=self.height_m)
+                pts = scan_to_xy(scan, offset_z_m=self.offset_z_m)
                 if pts.shape[0] == 0:
                     continue
                 dist = np.linalg.norm(pts[:, :2], axis=1)
@@ -277,7 +277,7 @@ def main() -> None:
     parser.add_argument("--host-ip", default="0.0.0.0",
                         help="绑定本机 IP（默认 0.0.0.0 监听所有网卡）")
     parser.add_argument("--height", type=float, default=0.0,
-                        help="扫描平面高度（米，雷达距地面高度）")
+                        help="雷达安装 z 偏移（米，横向安装相对转盘轴的距离）")
     parser.add_argument("--min-rssi", type=int, default=0,
                         help="回波强度下限过滤（默认 0 不过滤）")
     parser.add_argument("--max-range", type=float, default=50.0,
@@ -292,7 +292,7 @@ def main() -> None:
     viewer = LakiBeamViewer(
         host_ip=args.host_ip,
         port=args.port,
-        height_m=args.height,
+        offset_z_m=args.height,
         min_rssi=args.min_rssi,
         max_range_m=args.max_range,
         debug=args.debug,
