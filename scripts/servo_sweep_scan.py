@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """舵机转盘扫描 + LakiBeam 点云拼接实时显示。
 
-流程: 舵机带动转盘从 start 位置逐步旋转到 end 位置, 每个位置等雷达采一圈 2D 点云,
-按转盘角度绕世界 z 轴（竖直）旋转后拼入累计点云, Open3D 黑色背景绿色点实时显示。
+流程: 启动后先把转盘归位到 start 位置（等待到位），再从 start 逐步旋转到 end,
+每个位置等雷达采一圈 2D 点云, 按转盘角度绕世界 z 轴（竖直）旋转后拼入累计点云,
+Open3D 黑色背景绿色点实时显示。
 
 坐标系约定:
   雷达横装: x 向前, y 朝上, z 向右; 自转扫描弧在 x-y 竖直平面。
@@ -134,6 +135,8 @@ def main() -> None:
     parser.add_argument("--step", type=int, default=10, help="每次位置增量")
     parser.add_argument("--interval", type=float, default=2.0, help="每个位置停留秒数")
     parser.add_argument("--move-time", type=int, default=2000, help="舵机移动耗时 T（ms）")
+    parser.add_argument("--home-wait", type=float, default=3.0,
+                        help="归位后等待到位秒数（默认 3，含移动时间余量）")
     parser.add_argument("--servo-id", type=int, default=0, help="舵机 ID")
     parser.add_argument("--axis", default="z", choices=["x", "y", "z"],
                         help="绕世界系哪个轴旋转拼接（默认 z = 转盘竖直轴）")
@@ -159,6 +162,19 @@ def main() -> None:
     if not args.dry_run:
         ser = serial.Serial(args.port, args.baud, timeout=0.1)
         print(f"[open] 舵机 {args.port} @ {args.baud} baud")
+
+    # 1.5 归位初始化：先让转盘转到起始位置，等到位后再开始采集
+    home_cmd = f"#{args.servo_id:03d}P{args.start:04d}T{args.move_time}!"
+    print(f"[home] 转盘归位到起始位置 {args.start}: {home_cmd}")
+    if ser:
+        ser.write(home_cmd.encode())
+        ser.flush()
+    print(f"[home] 等待 {args.home_wait}s 到位...")
+    time.sleep(args.home_wait)
+
+    if args.dry_run:
+        print("\n[dry-run] 仅验证舵机指令序列（含归位），不连接雷达/Open3D，退出")
+        return
 
     # 2. 雷达 UDP
     lidar = LakiBeamViewer(host_ip="0.0.0.0", port=args.lidar_port, debug=args.debug)
