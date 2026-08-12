@@ -147,8 +147,8 @@ def main() -> None:
     parser.add_argument("--offset-z", type=float, default=0.0,
                         help="光心相对转盘轴心的 z 偏移（米，旋转前校正）")
     parser.add_argument("--max-range", type=float, default=50.0, help="最大显示距离（米）")
-    parser.add_argument("--grid", type=float, default=0.0,
-                        help="世界系水平面网格半宽（米），0 表示不画网格")
+    parser.add_argument("--grid", type=float, default=-1.0,
+                        help="世界系水平面网格半宽（米），默认按 max-range 自动设置，0 关闭")
     parser.add_argument("--grid-step", type=float, default=1.0, help="网格线间距（米）")
     parser.add_argument("--dry-run", action="store_true", help="只打印舵机指令不连串口")
     parser.add_argument("--debug", action="store_true", help="打印每包诊断信息")
@@ -173,9 +173,13 @@ def main() -> None:
 
     # 世界系 z=0 水平面网格（静态背景，画一次即可）
     grid = None
-    if args.grid > 0.0:
-        grid = create_ground_grid(args.grid, args.grid_step, z_level=0.0)
+    grid_half = args.grid if args.grid >= 0.0 else args.max_range
+    if grid_half > 0.0:
+        grid = create_ground_grid(grid_half, args.grid_step, z_level=0.0)
         vis.add_geometry(grid)
+        # 渲染器首轮 poll 前 add 的几何体不会显示，需先驱动一帧
+        vis.poll_events()
+        vis.update_renderer()
 
     # 预分配固定大小缓冲：点数永不变，避免每帧 remove/add 重建 GPU 缓冲导致的卡顿。
     # 未用部分以 NaN 填充，Open3D 渲染时跳过且不参与包围盒。
