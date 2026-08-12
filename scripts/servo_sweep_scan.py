@@ -55,6 +55,18 @@ def rotate_points(points: np.ndarray, axis: str, angle_deg: float) -> np.ndarray
     return points @ rotation_matrix(axis, angle_deg).T
 
 
+def mount_transform(points: np.ndarray) -> np.ndarray:
+    """出厂雷达系 → 横装后坐标（数学上恒等，保留步骤以便扩展）。
+
+    物理：LakiBeam 旋转镜轴 = 雷达 z 轴。出厂 z 朝上、扫描平面 x-y 水平；
+    横装后 z 轴（镜轴）朝右、扫描平面 x-y 竖直。
+    由于扫描平面固定在雷达坐标系的 x-y 平面，坐标系跟随雷达旋转，
+    扫描点坐标数值不变（x=r·cosθ, y=r·sinθ, z=0），仅 y 轴语义从
+    "横向"变为"朝上"。若实际安装有额外倾斜，在此叠加旋转矩阵。
+    """
+    return points
+
+
 def servo_pos_to_angle(
     pos: int, start: int, end: int, angle_start: float, angle_end: float
 ) -> float:
@@ -134,6 +146,8 @@ def main() -> None:
                 print(f"  [skip] 位置 {pos}: 雷达无数据")
                 continue
 
+            # 三步坐标处理：
+            # ① 极坐标 → 雷达系 xyz（x 前/y 上/z 右，扫描弧竖直）
             frame = scan_to_xy(scan)
             dist = np.linalg.norm(frame[:, :2], axis=1)
             frame = frame[dist <= args.max_range]
@@ -143,7 +157,9 @@ def main() -> None:
 
             angle = servo_pos_to_angle(pos, args.start, args.end,
                                        args.angle_start, args.angle_end)
-            # 光心偏移校正：把光心系点云平移到转盘轴心，再绕轴旋转
+            # ② 横装变换（出厂系 → 横装系，数学上恒等）
+            frame = mount_transform(frame)
+            # ③ 光心偏心校正：平移到转盘轴心，再绕转盘轴旋转
             frame[:, 0] -= args.offset_x
             frame[:, 2] -= args.offset_z
             rotated = rotate_points(frame, args.axis, angle)
