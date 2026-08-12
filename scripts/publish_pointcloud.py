@@ -39,7 +39,8 @@ def publish(points: np.ndarray, topic: str, frame_id: str, rate_hz: float) -> No
     """创建 ROS2 节点并循环发布点云。"""
     import rclpy
     from rclpy.node import Node
-    import sensor_msgs.point_cloud2 as pc2
+    # ROS2 humble: point_cloud2 工具在 sensor_msgs_py 包（旧版在 sensor_msgs 里）
+    import sensor_msgs_py.point_cloud2 as pc2
     from sensor_msgs.msg import PointCloud2
     from std_msgs.msg import Header
 
