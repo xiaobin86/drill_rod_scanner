@@ -129,11 +129,11 @@ def first_block_azimuth(packet: bytes) -> float | None:
 
 
 def scan_to_xy(points: list[ScanPoint], offset_z_m: float = 0.0) -> np.ndarray:
-    """将一圈测距点转换为 (n,3) 直角坐标点云（雷达系，横装）。
+    """将一圈测距点转换为 (n,3) 直角坐标点云（雷达系）。
 
-    雷达装在转轴侧面横装：z 超前（扫描弧法线）、x 向下、y 朝左。
-    自转扫描弧在 x-y 竖直平面，0° 指向 +x（下方），逆时针转向 +y（左方）。
-    z = offset_z_m 为沿法线方向的安装偏移（通常 0）。
+    雷达系（实测安装）：x 向前、y 朝上、z 向右。
+    自转扫描弧在 x-y 竖直平面，0° 指向 +x（正前方），逆时针转向 +y（上方）。
+    z = offset_z_m 为沿 z 方向的安装偏移（通常 0）。
     距离单位 mm -> m。
     """
     if not points:
@@ -142,9 +142,9 @@ def scan_to_xy(points: list[ScanPoint], offset_z_m: float = 0.0) -> np.ndarray:
     dists = np.array([p.dist_mm for p in points], dtype=np.float64) / 1000.0
     thetas = np.deg2rad(angles)
     return np.column_stack([
-        dists * np.cos(thetas),                        # x 向下（0° 指向 +x）
-        dists * np.sin(thetas),                        # y 朝左（竖直扫描弧）
-        np.full(len(points), offset_z_m, dtype=np.float64),  # z 超前（法线）
+        dists * np.cos(thetas),                        # x 向前（0° 指向 +x）
+        dists * np.sin(thetas),                        # y 朝上（竖直扫描弧）
+        np.full(len(points), offset_z_m, dtype=np.float64),  # z 向右（安装偏移）
     ])
 
 
