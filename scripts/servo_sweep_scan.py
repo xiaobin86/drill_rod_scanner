@@ -116,15 +116,7 @@ def main() -> None:
     cloud_buf = np.full((max_points, 3), np.nan, dtype=np.float64)
     color_buf = np.tile([0.0, 1.0, 0.0], (max_points, 1))  # 绿色点
 
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(cloud_buf)
-    pcd.colors = o3d.utility.Vector3dVector(color_buf)
-    vis.add_geometry(pcd)
-    ctr = vis.get_view_control()
-    ctr.set_front([0.0, 0.0, 1.0])
-    ctr.set_up([0.0, 1.0, 0.0])
-    ctr.set_lookat([0.0, 0.0, 0.0])
-
+    pcd: o3d.geometry.PointCloud | None = None
     total_points = 0
     try:
         for pos in positions:
@@ -157,9 +149,21 @@ def main() -> None:
             total_points += n
             print(f"  [scan] pos={pos} angle={angle:.1f}° 帧 {n} 点, 累计 {total_points} 点")
 
-            # 点数不变，update_geometry 走快速路径
-            pcd.points = o3d.utility.Vector3dVector(cloud_buf)
-            vis.update_geometry(pcd)
+            # 首帧真实数据写入后才 add_geometry：此时包围盒含有效点。
+            # （全 NaN 或空点云 add 会得到退化包围盒导致不渲染。）
+            if pcd is None:
+                pcd = o3d.geometry.PointCloud()
+                pcd.points = o3d.utility.Vector3dVector(cloud_buf)
+                pcd.colors = o3d.utility.Vector3dVector(color_buf)
+                vis.add_geometry(pcd)
+                ctr = vis.get_view_control()
+                ctr.set_front([0.0, 0.0, 1.0])
+                ctr.set_up([0.0, 1.0, 0.0])
+                ctr.set_lookat([0.0, 0.0, 0.0])
+            else:
+                # 点数不变，update_geometry 走快速路径
+                pcd.points = o3d.utility.Vector3dVector(cloud_buf)
+                vis.update_geometry(pcd)
             vis.update_renderer()
             vis.poll_events()
 
