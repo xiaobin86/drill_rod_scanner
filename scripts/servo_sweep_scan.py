@@ -6,10 +6,11 @@
 Open3D 黑色背景绿色点实时显示。
 
 坐标系约定:
-  雷达横装: x 向前, y 朝上, z 向右; 自转扫描弧在 x-y 竖直平面。
+  雷达装在转轴侧面横装: z 超前（扫描弧法线）, x 向下, y 朝左;
+  自转扫描弧在 x-y 竖直平面（0° 指向 +x 下方）。
   世界系: z 轴竖直（转盘旋转轴）, x/y 水平（转盘平面）。
-  坐标处理: 极坐标 -> 雷达系 xyz -> 横装变换(恒等) -> 偏心校正 -> to_world(雷达系->世界系)
-  -> 绕世界 z 轴（转盘轴）旋转, 把竖直扫描弧聚合成 3D 扫描面。
+  坐标处理: 极坐标 -> 雷达系 xyz -> 横装变换(恒等) -> 偏心校正(offset-y)
+  -> to_world(雷达系->世界系) -> 绕世界 z 轴（转盘轴）旋转聚合 3D 扫描面。
   因此拼接旋转轴默认 --axis z（= 世界转盘轴）。
 
 用法:
@@ -72,12 +73,11 @@ def mount_transform(points: np.ndarray) -> np.ndarray:
 def to_world(points: np.ndarray) -> np.ndarray:
     """横装雷达系 → 世界系（转盘系）。
 
-    雷达系（横装）：x 前、y 上、z 右。
+    雷达装在转轴侧面横装：z 超前（法线）、x 向下、y 朝左。
     世界系：z 竖直（转盘旋转轴）、x/y 水平（转盘平面）。
-    映射：世界 x=雷达 x（初始方位朝前）、世界 y=雷达 z、世界 z=雷达 y（朝上）。
-    若雷达初始方位不同，交换世界 x/y 或取反。
+    映射：世界 x=横装 z（前）、世界 y=横装 y（左）、世界 z=-横装 x（下→上）。
     """
-    return points[:, [0, 2, 1]]  # (x, y, z) -> (x_radar, z_radar, y_radar)
+    return points[:, [2, 1, 0]] * np.array([1.0, 1.0, -1.0])
 
 
 def create_ground_grid(
@@ -145,10 +145,8 @@ def main() -> None:
     parser.add_argument("--angle-end", type=float, default=180.0,
                         help="end 位置对应的旋转角度（度）")
     parser.add_argument("--lidar-port", type=int, default=2368, help="雷达数据端口")
-    parser.add_argument("--offset-x", type=float, default=0.0,
-                        help="光心相对转盘轴心的 x 偏移（米，旋转前校正）")
-    parser.add_argument("--offset-z", type=float, default=0.0,
-                        help="光心相对转盘轴心的 z 偏移（米，旋转前校正）")
+    parser.add_argument("--offset-y", type=float, default=0.0,
+                        help="光心相对转盘轴心的 y 偏移（米，横装系 y 方向，y 反方向为负）")
     parser.add_argument("--max-range", type=float, default=50.0, help="最大显示距离（米）")
     parser.add_argument("--grid", type=float, default=-1.0,
                         help="世界系水平面网格半宽（米），默认按 max-range 自动设置，0 关闭")
@@ -236,8 +234,7 @@ def main() -> None:
             frame = mount_transform(frame)
             # ③ 光心偏心校正：光心绕转盘轴做圆弧运动，
             #    世界点 = Rz(θ)·(雷达系测量 + 光心偏移d)，须先加 d 再旋转
-            frame[:, 0] += args.offset_x
-            frame[:, 2] += args.offset_z
+            frame[:, 1] += args.offset_y
             # ④ 雷达系 → 世界系（z 竖直 = 转盘轴）
             frame = to_world(frame)
             # ⑤ 绕世界 z 轴（转盘轴）旋转，聚合 3D 扫描面

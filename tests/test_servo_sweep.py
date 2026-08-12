@@ -20,23 +20,23 @@ def test_mount_transform_identity():
 
 
 def test_to_world_axis_mapping():
-    # 雷达系 (x前, y上, z右) -> 世界系 (z竖, x/y水平)
-    # 世界 x=雷达 x, 世界 y=雷达 z, 世界 z=雷达 y
+    # 横装系 (z前, x下, y左) -> 世界系 (z竖, x/y水平)
+    # 世界 x=横装 z（前）, 世界 y=横装 y（左）, 世界 z=-横装 x（下→上）
     pts = np.array([
-        [1.0, 0.0, 0.0],   # 雷达 x（前）-> 世界 x
-        [0.0, 1.0, 0.0],   # 雷达 y（上）-> 世界 z
-        [0.0, 0.0, 1.0],   # 雷达 z（右）-> 世界 y
+        [1.0, 0.0, 0.0],   # 横装 x（下）-> 世界 -z
+        [0.0, 1.0, 0.0],   # 横装 y（左）-> 世界 y
+        [0.0, 0.0, 1.0],   # 横装 z（前）-> 世界 x
     ])
     out = to_world(pts)
-    np.testing.assert_allclose(out[0], [1.0, 0.0, 0.0], atol=1e-9)
-    np.testing.assert_allclose(out[1], [0.0, 0.0, 1.0], atol=1e-9)
-    np.testing.assert_allclose(out[2], [0.0, 1.0, 0.0], atol=1e-9)
+    np.testing.assert_allclose(out[0], [0.0, 0.0, -1.0], atol=1e-9)
+    np.testing.assert_allclose(out[1], [0.0, 1.0, 0.0], atol=1e-9)
+    np.testing.assert_allclose(out[2], [1.0, 0.0, 0.0], atol=1e-9)
 
 
 def test_to_world_then_rotate_z():
-    # 雷达前方点 (1,0,0) -> 世界 (1,0,0), 绕世界 z 转 90° -> (0,1,0)
+    # 横装前方点 (0,0,1) -> 世界 (1,0,0), 绕世界 z 转 90° -> (0,1,0)
     # 即竖直扫描弧绕世界 z（转盘轴）扫出水平扇面
-    pts = to_world(np.array([[1.0, 0.0, 0.0]]))
+    pts = to_world(np.array([[0.0, 0.0, 1.0]]))
     out = rotate_points(pts, "z", 90.0)
     np.testing.assert_allclose(out[0], [0.0, 1.0, 0.0], atol=1e-9)
 
@@ -104,15 +104,15 @@ def test_turntable_aggregation_axis_y():
 def test_eccentric_offset_arc_reconstruction():
     """光心偏心圆弧运动的完整物理循环：世界点必须在各角度被精确重建。
 
-    物理模型：光心相对转盘轴心偏移 d（雷达系常量），转盘转 θ 时
-    光心世界位置 = Rz(θ)·T·d。雷达测量 p = T⁻¹·Rz(-θ)·(P - C)。
+    物理模型：光心相对转盘轴心偏移 d（横装系常量，y 反方向 0.055），
+    转盘转 θ 时光心世界位置 = Rz(θ)·T·d。雷达测量 p = T⁻¹·Rz(-θ)·(P - C)。
     重建公式（修复后）：P = Rz(θ)·T·(p + d)——先加 d 再旋转。
     这是"各圆柱面" bug 的回归测试：若用 p - d（旧错误实现），
     重建点会随角度漂移而非固定在 P。
     """
     P = np.array([2.0, 0.0, 0.5])   # 世界系墙上的固定点
-    d = np.array([0.055, 0.0, 0.0])  # 光心偏移（雷达系 x=前方 5.5cm）
-    T = np.array([[1, 0, 0], [0, 0, 1], [0, 1, 0]])  # to_world: (x,y,z)->(x,z,y)
+    d = np.array([0.0, -0.055, 0.0])  # 光心偏移（横装系 y 反方向 5.5cm）
+    T = np.array([[0, 0, 1], [0, 1, 0], [-1, 0, 0]])  # to_world 新轴映射
 
     def rotz(theta: float) -> np.ndarray:
         c, s = np.cos(np.deg2rad(theta)), np.sin(np.deg2rad(theta))
@@ -120,7 +120,8 @@ def test_eccentric_offset_arc_reconstruction():
 
     for theta in [0, 45, 90, 180, 270]:
         C = rotz(theta) @ (T @ d)                    # 光心世界位置（圆弧运动）
-        p_radar = T @ (rotz(-theta) @ (P - C))       # 雷达系测量
+        # 雷达测量在横装系：p = T⁻¹·Rz(-θ)·(P - C)（T 非自逆，须用逆）
+        p_radar = np.linalg.inv(T) @ (rotz(-theta) @ (P - C))
         # 修复后的重建：先加 d（雷达系），再 to_world，再旋转
         recon = rotate_points(to_world((p_radar + d).reshape(1, 3)), "z", theta)[0]
         np.testing.assert_allclose(recon, P, atol=1e-9)
