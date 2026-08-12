@@ -47,7 +47,6 @@ def publish(points: np.ndarray, topic: str, frame_id: str, rate_hz: float) -> No
     rclpy.init()
     node = Node("drill_scan_publisher")
     pub = node.create_publisher(PointCloud2, topic, 10)
-    header = Header(frame_id=frame_id)
 
     n = points.shape[0]
     print(f"发布 {n} 点到 topic {topic} (frame_id={frame_id}), 频率 {rate_hz}Hz")
@@ -55,6 +54,9 @@ def publish(points: np.ndarray, topic: str, frame_id: str, rate_hz: float) -> No
 
     try:
         while rclpy.ok():
+            # 每帧用当前时间戳，RViz 依赖 stamp 查询 TF；stamp=0 会导致不显示
+            header = Header(frame_id=frame_id)
+            header.stamp = node.get_clock().now().to_msg()
             msg = pc2.create_cloud_xyz32(header, points)
             pub.publish(msg)
             rclpy.spin_once(node, timeout_sec=0)
