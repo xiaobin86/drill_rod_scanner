@@ -107,12 +107,27 @@ def main() -> None:
     vis = o3d.visualization.Visualizer()
     vis.create_window(window_name="Servo Sweep Scan", width=900, height=700)
     vis.get_render_option().background_color = np.array([0.0, 0.0, 0.0])  # 黑色背景
-    pcd = o3d.geometry.PointCloud()
-    geometry_added = False
-    accumulated: list[np.ndarray] = []
 
+    # 预分配固定大小缓冲：点数永不变，避免每帧 remove/add 重建 GPU 缓冲导致的卡顿。
+    # 未用部分以 NaN 填充，Open3D 渲染时跳过且不参与包围盒。
+    positions = list(range(args.start, args.end + 1, args.step))
+    points_per_frame = 2500  # 每圈点云上限（含余量）
+    max_points = len(positions) * points_per_frame
+    cloud_buf = np.full((max_points, 3), np.nan, dtype=np.float64)
+    color_buf = np.tile([0.0, 1.0, 0.0], (max_points, 1))  # 绿色点
+
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(cloud_buf)
+    pcd.colors = o3d.utility.Vector3dVector(color_buf)
+    vis.add_geometry(pcd)
+    ctr = vis.get_view_control()
+    ctr.set_front([0.0, 0.0, 1.0])
+    ctr.set_up([0.0, 1.0, 0.0])
+    ctr.set_lookat([0.0, 0.0, 0.0])
+
+    total_points = 0
     try:
-        for pos in range(args.start, args.end + 1, args.step):
+        for pos in positions:
             cmd = f"#{args.servo_id:03d}P{pos:04d}T{args.move_time}!"
             print(f"[servo] {cmd}")
             if ser:
@@ -128,33 +143,27 @@ def main() -> None:
             frame = scan_to_xy(scan, offset_z_m=args.offset_z)
             dist = np.linalg.norm(frame[:, :2], axis=1)
             frame = frame[dist <= args.max_range]
+            if frame.shape[0] == 0:
+                print(f"  [skip] 位置 {pos}: 滤波后无点")
+                continue
 
             angle = servo_pos_to_angle(pos, args.start, args.end,
                                        args.angle_start, args.angle_end)
             rotated = rotate_points(frame, args.axis, angle)
-            accumulated.append(rotated)
-            cloud = np.vstack(accumulated)
-            print(f"  [scan] pos={pos} angle={angle:.1f}° 帧 {len(rotated)} 点, 累计 {len(cloud)} 点")
 
-            # 点数每帧增长，必须 remove+add 刷新渲染缓冲，否则 Open3D 卡死
-            pcd.points = o3d.utility.Vector3dVector(cloud)
-            pcd.colors = o3d.utility.Vector3dVector(
-                np.tile([0.0, 1.0, 0.0], (len(cloud), 1))  # 绿色点
-            )
-            if not geometry_added:
-                vis.add_geometry(pcd)
-                ctr = vis.get_view_control()
-                ctr.set_front([0.0, 0.0, 1.0])
-                ctr.set_up([0.0, 1.0, 0.0])
-                ctr.set_lookat([0.0, 0.0, 0.0])
-                geometry_added = True
-            else:
-                vis.remove_geometry(pcd, reset_bounding_box=False)
-                vis.add_geometry(pcd, reset_bounding_box=False)
+            # 增量写入固定缓冲，避免 vstack 全量复制
+            n = rotated.shape[0]
+            cloud_buf[total_points:total_points + n] = rotated
+            total_points += n
+            print(f"  [scan] pos={pos} angle={angle:.1f}° 帧 {n} 点, 累计 {total_points} 点")
+
+            # 点数不变，update_geometry 走快速路径
+            pcd.points = o3d.utility.Vector3dVector(cloud_buf)
+            vis.update_geometry(pcd)
             vis.update_renderer()
             vis.poll_events()
 
-        print(f"\n扫描完成: {len(accumulated)} 帧, 累计 {len(cloud) if accumulated else 0} 点")
+        print(f"\n扫描完成: {len(positions)} 个位置, 累计 {total_points} 点")
         print("窗口保持打开, 可鼠标旋转/缩放查看, Ctrl+C 或关窗退出")
         while vis.poll_events():
             vis.update_renderer()
