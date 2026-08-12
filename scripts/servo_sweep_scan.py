@@ -75,7 +75,7 @@ def to_world(points: np.ndarray) -> np.ndarray:
     雷达系（实测安装）：x 前、y 上、z 右，扫描弧在 x-y 竖直面（0° 指前）。
     世界系：z 竖直（转盘旋转轴）、x/y 水平。
     映射：世界 x=雷达 x（前）、世界 y=雷达 z（右）、世界 z=雷达 y（上）。
-    转盘绕世界 z 旋转（= 雷达 y 轴），故拼接旋转轴用 --axis y。
+    点已在世界系，转盘绕世界 z 轴旋转，拼接旋转轴用 --axis z。
     """
     return points[:, [0, 2, 1]]  # (x, y, z) -> (x_radar, z_radar, y_radar)
 
