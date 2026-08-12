@@ -234,9 +234,10 @@ def main() -> None:
                                        args.angle_start, args.angle_end)
             # ② 横装变换（出厂系 → 横装系，数学上恒等）
             frame = mount_transform(frame)
-            # ③ 光心偏心校正：平移到转盘轴心
-            frame[:, 0] -= args.offset_x
-            frame[:, 2] -= args.offset_z
+            # ③ 光心偏心校正：光心绕转盘轴做圆弧运动，
+            #    世界点 = Rz(θ)·(雷达系测量 + 光心偏移d)，须先加 d 再旋转
+            frame[:, 0] += args.offset_x
+            frame[:, 2] += args.offset_z
             # ④ 雷达系 → 世界系（z 竖直 = 转盘轴）
             frame = to_world(frame)
             # ⑤ 绕世界 z 轴（转盘轴）旋转，聚合 3D 扫描面

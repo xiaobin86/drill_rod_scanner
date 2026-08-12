@@ -99,3 +99,32 @@ def test_turntable_aggregation_axis_y():
     np.testing.assert_allclose(out[0], [0.0, 0.0, -1.0], atol=1e-9)
     # (0,1,0) 在旋转轴上不变（竖直轴不随转盘旋转）
     np.testing.assert_allclose(out[1], [0.0, 1.0, 0.0], atol=1e-9)
+
+
+def test_eccentric_offset_arc_reconstruction():
+    """光心偏心圆弧运动的完整物理循环：世界点必须在各角度被精确重建。
+
+    物理模型：光心相对转盘轴心偏移 d（雷达系常量），转盘转 θ 时
+    光心世界位置 = Rz(θ)·T·d。雷达测量 p = T⁻¹·Rz(-θ)·(P - C)。
+    重建公式（修复后）：P = Rz(θ)·T·(p + d)——先加 d 再旋转。
+    这是"各圆柱面" bug 的回归测试：若用 p - d（旧错误实现），
+    重建点会随角度漂移而非固定在 P。
+    """
+    P = np.array([2.0, 0.0, 0.5])   # 世界系墙上的固定点
+    d = np.array([0.055, 0.0, 0.0])  # 光心偏移（雷达系 x=前方 5.5cm）
+    T = np.array([[1, 0, 0], [0, 0, 1], [0, 1, 0]])  # to_world: (x,y,z)->(x,z,y)
+
+    def rotz(theta: float) -> np.ndarray:
+        c, s = np.cos(np.deg2rad(theta)), np.sin(np.deg2rad(theta))
+        return np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
+
+    for theta in [0, 45, 90, 180, 270]:
+        C = rotz(theta) @ (T @ d)                    # 光心世界位置（圆弧运动）
+        p_radar = T @ (rotz(-theta) @ (P - C))       # 雷达系测量
+        # 修复后的重建：先加 d（雷达系），再 to_world，再旋转
+        recon = rotate_points(to_world((p_radar + d).reshape(1, 3)), "z", theta)[0]
+        np.testing.assert_allclose(recon, P, atol=1e-9)
+
+        # 旧错误实现（减 d）应产生漂移——验证测试能捕获回归
+        bad = rotate_points(to_world((p_radar - d).reshape(1, 3)), "z", theta)[0]
+        assert not np.allclose(bad, P, atol=1e-6), f"θ={theta}° 旧实现竟重建成功"
