@@ -20,12 +20,15 @@ python scripts/run_scan.py --config config/scanner.yaml
 
 ## LakiBeam 雷达实时可视化
 
-连接 LakiBeam 系列（1/1S/1L）以太网雷达，实时查看点云：
+连接 LakiBeam 系列（1/1S/1L）以太网雷达，实时查看点云。
+（官方 Windows 可视化软件为 RBView/Pointcloud，无 Ubuntu 版；本脚本为 Ubuntu 替代方案）
 
 ```bash
-# 1. 将本机网卡 IP 设为 192.168.198.1（与雷达默认地址同网段）
+# 1. 配置网卡：本机 IP 设为 192.168.198.1（与雷达默认地址 192.168.198.2 同网段）
+#    Ubuntu 临时配置（以 enp3s0 为例，用 ip addr 查看你的网卡名）：
+#    sudo ip addr add 192.168.198.1/24 dev enp3s0
 # 2. 浏览器打开 http://192.168.198.2 确认雷达已启动测距（laser_enable=True）
-# 3. 运行查看器
+# 3. 运行查看器（默认端口 2368 与雷达出厂配置一致）
 conda activate drill_rod_scanner
 python scripts/lakibeam_viewer.py --lidar-ip 192.168.198.2 --port 2368
 ```

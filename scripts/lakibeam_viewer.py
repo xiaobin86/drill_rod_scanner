@@ -5,7 +5,9 @@
 解析出距离/角度/回波强度，转换为直角坐标点云并用 Open3D 实时显示。
 
 用法:
-    # 先确保本机网卡 IP 与雷达同网段（如 192.168.198.1）
+    # 0. 网线连接雷达，本机网卡配 192.168.198.1/24（雷达出厂 192.168.198.2）
+    #    sudo ip addr add 192.168.198.1/24 dev <网卡名>
+    # 1. 浏览器 http://192.168.198.2 确认 laser_enable=True, DataPort=2368
     conda run -n drill_rod_scanner python scripts/lakibeam_viewer.py
     conda run -n drill_rod_scanner python scripts/lakibeam_viewer.py --lidar-ip 192.168.198.2 --port 2368
 
