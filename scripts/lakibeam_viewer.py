@@ -222,12 +222,7 @@ class LakiBeamViewer:
         vis = o3d.visualization.Visualizer()
         vis.create_window(window_name="LakiBeam Live", width=800, height=600)
         pcd = o3d.geometry.PointCloud()
-        vis.add_geometry(pcd)
-
-        # 固定视角：从上方俯视扫描平面
-        ctr = vis.get_view_control()
-        ctr.set_front([0.0, 0.0, 1.0])
-        ctr.set_up([0.0, 1.0, 0.0])
+        geometry_added = False
 
         frame_count = 0
         try:
@@ -236,7 +231,6 @@ class LakiBeamViewer:
                 if scan is None:
                     continue  # 超时无数据，继续等
 
-                # 滤波：RSSI 下限 + 最大距离
                 pts = scan_to_xy(scan, z=self.z)
                 if pts.shape[0] == 0:
                     continue
@@ -245,7 +239,18 @@ class LakiBeamViewer:
                 pts = pts[mask]
 
                 pcd.points = o3d.utility.Vector3dVector(pts)
-                vis.update_geometry(pcd)
+
+                if not geometry_added:
+                    # 首次有真实数据再添加几何体，否则空包围盒会导致画面空白
+                    vis.add_geometry(pcd)
+                    ctr = vis.get_view_control()
+                    ctr.set_front([0.0, 0.0, 1.0])
+                    ctr.set_up([0.0, 1.0, 0.0])
+                    ctr.set_lookat([0.0, 0.0, 0.0])
+                    geometry_added = True
+                else:
+                    # reset_bounding_box=True：更新包围盒，避免视锥裁剪裁掉新点
+                    vis.update_geometry(pcd, reset_bounding_box=True)
                 vis.update_renderer()
 
                 frame_count += 1
