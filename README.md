@@ -18,6 +18,21 @@ python scripts/run_scan.py --config config/scanner.yaml
 - `drill_rod_scanner/scanner.py` 扫描编排器
 - `config/scanner.yaml` 运行配置
 
+## LakiBeam 雷达实时可视化
+
+连接 LakiBeam 系列（1/1S/1L）以太网雷达，实时查看点云：
+
+```bash
+# 1. 将本机网卡 IP 设为 192.168.198.1（与雷达默认地址同网段）
+# 2. 浏览器打开 http://192.168.198.2 确认雷达已启动测距（laser_enable=True）
+# 3. 运行查看器
+conda activate drill_rod_scanner
+python scripts/lakibeam_viewer.py --lidar-ip 192.168.198.2 --port 2368
+```
+
+常用参数：`--port`（接收端口，需与雷达配置一致）、`--max-range`（最大距离过滤）、
+`--min-rssi`（回波强度过滤）、`--z`（扫描平面高度）。Ctrl+C 退出。
+
 ## 测试
 
 ```bash
@@ -28,5 +43,6 @@ pytest tests/ -v
 ## 当前状态
 
 - 点云拼接算法已完整实现并通过单测（不依赖硬件）。
-- 舵机/雷达串口协议命令待补充：`drill_rod_scanner/servo/serial_servo.py`
+- LakiBeam MSOP 协议解析器已实现并通过单测（`tests/test_lakibeam_msop.py`）。
+- 舵机串口协议命令待补充：`drill_rod_scanner/servo/serial_servo.py`
   与 `drill_rod_scanner/lidar/serial_lidar.py` 中的 `TODO(用户补充)` 标记处。
