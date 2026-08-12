@@ -80,6 +80,29 @@ def to_world(points: np.ndarray) -> np.ndarray:
     return points[:, [0, 2, 1]]  # (x, y, z) -> (x_radar, z_radar, y_radar)
 
 
+def save_cloud(points: np.ndarray, output_dir: str, cloud_format: str = "ply") -> dict[str, Path]:
+    """将 (n,3) 点云保存为 PLY/PCD 文件 + numpy 原始数据。"""
+    import open3d as o3d
+
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(points)
+
+    if cloud_format == "pcd":
+        cloud_path = out / "cloud.pcd"
+        o3d.io.write_point_cloud(str(cloud_path), pcd, write_ascii=True)
+    else:
+        cloud_path = out / "cloud.ply"
+        o3d.io.write_point_cloud(str(cloud_path), pcd)
+
+    np_path = out / "cloud.npy"
+    np.save(np_path, points)
+
+    return {"cloud": cloud_path, "numpy": np_path}
+
+
 def create_ground_grid(
     half_extent: float, step: float, z_level: float = 0.0
 ) -> "o3d.geometry.LineSet":
@@ -167,6 +190,8 @@ def main() -> None:
     parser.add_argument("--offset-z", type=float, default=0.0,
                         help="光心相对转盘轴心的 z 偏移（米，旋转前校正）")
     parser.add_argument("--max-range", type=float, default=50.0, help="最大显示距离（米）")
+    parser.add_argument("--save-dir", type=str, default="",
+                        help="扫描完成后保存点云到该目录（PLY+PCD+npz），留空不保存")
     parser.add_argument("--grid", type=float, default=-1.0,
                         help="世界系水平面网格半宽（米），默认按 max-range 自动设置，0 关闭")
     parser.add_argument("--grid-step", type=float, default=1.0, help="网格线间距（米）")
@@ -285,6 +310,15 @@ def main() -> None:
             vis.poll_events()
 
         print(f"\n扫描完成: {len(positions)} 个位置, 累计 {total_points} 点")
+
+        # 保存点云：取缓冲中有效部分（NaN 填充之外）
+        if args.save_dir and total_points > 0:
+            valid = cloud_buf[:total_points]
+            saved = save_cloud(valid, args.save_dir, "ply")
+            print(f"[save] 点云已保存到 {args.save_dir}")
+            for kind, path in saved.items():
+                print(f"  {kind}: {path}")
+
         print("窗口保持打开, 可鼠标旋转/缩放查看, Ctrl+C 或关窗退出")
         while vis.poll_events():
             vis.update_renderer()

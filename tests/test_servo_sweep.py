@@ -7,9 +7,20 @@ from scripts.servo_sweep_scan import (
     mount_transform,
     rotation_matrix,
     rotate_points,
+    save_cloud,
     servo_pos_to_angle,
     to_world,
 )
+
+
+def test_save_cloud(tmp_path):
+    # 保存 (n,3) 点云为 PLY + numpy，验证文件生成与内容
+    pts = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])
+    files = save_cloud(pts, str(tmp_path))
+    assert (tmp_path / "cloud.ply").exists()
+    assert (tmp_path / "cloud.npy").exists()
+    loaded = np.load(tmp_path / "cloud.npy")
+    np.testing.assert_allclose(loaded, pts)
 
 
 def test_mount_transform_identity():

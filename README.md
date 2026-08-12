@@ -44,21 +44,38 @@ Open3D 黑底绿点实时显示：
 ```bash
 conda activate drill_rod_scanner
 python scripts/servo_sweep_scan.py \
-  --port /dev/ttyUSB0 --start 500 --end 1000 --step 10 --interval 2 \
-  --axis z --angle-start 0 --angle-end 180
+  --port /dev/ttyUSB0 --start 500 --end 2500 --step 50 --interval 1.5 \
+  --axis z --angle-start 0 --angle-end 360 --offset-x 0.055 \
+  --save-dir output
 ```
 
 参数说明：
 - `--start/--end/--step`：舵机位置 P 值范围与增量（对应 `servo_sweep_demo.py`）
 - `--interval`：每个位置停留秒数（等雷达采完一圈）
-- `--axis`：点云旋转轴（默认 `y`：转盘绕世界 z 轴竖直旋转 = 雷达系 y 轴）
+- `--axis`：点云旋转轴（默认 `z`：绕世界 z 竖直转盘轴）
 - `--angle-start/--angle-end`：start/end 位置对应的旋转角度（度）
-- `--offset-z`：雷达安装 z 偏移（米，相对转盘轴）
+- `--offset-x/--offset-z`：光心相对转盘轴心的偏心校正（米）
+- `--save-dir`：扫描完成后保存点云到该目录（PLY+PCD+numpy），留空不保存
 - `--dry-run`：只打印舵机指令，不连串口（可先验证指令格式）
 
-坐标系约定：雷达横装，雷达系 x 向前、y 朝上、z 向右，自转扫描弧在 x-y 竖直平面；
-世界系 z 轴竖直（转盘旋转轴），与雷达系 y 轴同向。转盘绕世界 z 轴水平旋转，
+坐标系约定：雷达系 x 向前、y 朝上、z 向右，自转扫描弧在 x-y 竖直平面；
+世界系 z 轴竖直（转盘旋转轴）。转盘绕世界 z 轴水平旋转，
 把不同时刻的竖直扫描弧聚合成 3D 扫描面。
+
+## ROS2 发布（RViz 可视化）
+
+扫描保存点云后，可在 ROS2 环境（Docker `pallet_vision:humble` 或装有 ROS2 的机器）发布为 topic：
+
+```bash
+# 本机扫描并保存
+python scripts/servo_sweep_scan.py --save-dir output ... --max-range 6
+
+# ROS2 环境（Docker/其他机器）：发布点云
+# 需先 source ROS2: source /opt/ros/humble/setup.bash
+python scripts/publish_pointcloud.py --file output/cloud.npy --topic /drill_scan_cloud
+
+# 另一个终端启动 RViz，添加 PointCloud2 → 选 /drill_scan_cloud 即可查看
+```
 
 ## 测试
 
