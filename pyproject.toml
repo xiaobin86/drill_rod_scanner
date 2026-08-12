@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "drill-rod-scanner"
+version = "0.1.0"
+description = "Rotary LiDAR scanning: servo rotates from angle A to B, LiDAR captures point cloud frames, stitched into full cloud for drill rod localization"
+requires-python = ">=3.10"
+dependencies = [
+    "pyserial>=3.5",
+    "numpy>=1.24",
+    "open3d>=0.17",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[tool.setuptools.packages.find]
+include = ["drill_rod_scanner*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

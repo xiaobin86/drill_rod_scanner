@@ -1,0 +1,22 @@
+servo:
+  port: /dev/ttyUSB0
+  baudrate: 115200
+  # 协议命令、角度换算待用户后续补充
+
+lidar:
+  port: /dev/ttyUSB1
+  baudrate: 115200
+  # 协议命令、点云帧解析待用户后续补充
+
+scan:
+  from_deg: 0.0        # 起始角度 A
+  to_deg: 180.0        # 结束角度 B
+  step_deg: 10.0       # 角度步进
+  settle_time_s: 0.5   # 舵机到位后等待稳定的时间
+
+stitch:
+  voxel_size: 0.005    # 体素下采样边长（米），null 表示不下采样
+
+output:
+  dir: output/
+  cloud_format: ply    # ply | pcd
