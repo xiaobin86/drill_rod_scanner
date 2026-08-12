@@ -4,12 +4,15 @@
 流程: 舵机从 start 位置逐步旋转到 end 位置, 每个位置等雷达采一圈 2D 点云,
 按舵机位置映射的角度绕旋转轴旋转后拼入累计点云, Open3D 黑色背景绿色点实时显示。
 
-雷达坐标系: x 向前, z 向右, y 朝天 (扫描平面为 x-z 水平面)。
+坐标系约定:
+  雷达系 (横装): x 向前, y 朝天, z 向右, 扫描平面为 x-z 水平面 (y 固定为扫描高度)。
+  世界系: 与雷达初始位姿对齐。舵机绕世界坐标 z 轴旋转雷达 (水平横向轴),
+  扫描平面随之翻转, 扫过不同高度, 拼接得到 3D 点云。因此默认 --axis z。
 
 用法:
   python scripts/servo_sweep_scan.py                          # 默认 500->1000, 步进10
   python scripts/servo_sweep_scan.py --port /dev/ttyUSB0 --start 100 --end 300 --step 20
-  python scripts/servo_sweep_scan.py --axis y --angle-start 0 --angle-end 180
+  python scripts/servo_sweep_scan.py --axis z --angle-start 0 --angle-end 180
   python scripts/servo_sweep_scan.py --dry-run                # 不连串口, 只打印指令
 """
 
