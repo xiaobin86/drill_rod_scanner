@@ -249,8 +249,8 @@ class LakiBeamViewer:
                     ctr.set_lookat([0.0, 0.0, 0.0])
                     geometry_added = True
                 else:
-                    # reset_bounding_box=True：更新包围盒，避免视锥裁剪裁掉新点
-                    vis.update_geometry(pcd, reset_bounding_box=True)
+                    # 首次 add 时包围盒已基于真实数据建立，扫描范围固定，直接更新即可
+                    vis.update_geometry(pcd)
                 vis.update_renderer()
 
                 frame_count += 1
