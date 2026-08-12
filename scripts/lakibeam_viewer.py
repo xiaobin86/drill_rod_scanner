@@ -42,7 +42,9 @@ import numpy as np
 MSOP_DATA_BLOCKS = 12
 MSOP_POINTS_PER_BLOCK = 16
 MSOP_BLOCK_SIZE = 100  # 2 flag + 2 azimuth + 16*6
-MSOP_PACKET_SIZE = 42 + MSOP_DATA_BLOCKS * MSOP_BLOCK_SIZE + 4 + 2  # 1248
+# UDP 载荷 = 12×100B Data Block + 4B Timestamp + 2B Factory = 1206 字节。
+# （42B 网络头由内核剥离，不进入应用层载荷；tcpdump 实测 length 1206。）
+MSOP_PACKET_SIZE = MSOP_DATA_BLOCKS * MSOP_BLOCK_SIZE + 4 + 2
 DATA_FLAG = 0xEEFF
 INVALID_DIST = 0
 
@@ -71,7 +73,7 @@ class MSOPParser:
             return []
 
         points: list[ScanPoint] = []
-        offset = 42  # 跳过 UDP/IP 头
+        offset = 0  # UDP 载荷直接从 DataFlag 开始，无网络头
 
         # 解析所有块的 Azimuth，先取前两块角度差计算块内插值分辨率。
         # （与官方 ROS2 驱动一致：resolution = (Azimuth[1] - Azimuth[0]) / 16，

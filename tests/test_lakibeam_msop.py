@@ -18,13 +18,18 @@ def build_msop_packet(
     azimuths_deg: list[float],
     dist_mm: int = 2300,
     rssi: int = 49,
+    prefix: bytes = b"",
 ) -> bytes:
-    """构造一个 1248 字节的 MSOP 包。
+    """构造一个 MSOP UDP 载荷包。
 
     Args:
         azimuths_deg: 12 个 Data Block 的角度（度）
         dist_mm: 所有点的距离（mm）
         rssi: 所有点的回波强度
+        prefix: 可选前导字节（用于构造异常格式测试）
+
+    真实格式：UDP 载荷 = 12×100B Data Block + 4B Timestamp + 2B Factory = 1206 字节，
+    直接从 DataFlag 开始（网络层 42B 头由内核剥离，不进入应用层载荷）。
     """
     assert len(azimuths_deg) == 12
     body = bytearray()
@@ -42,15 +47,15 @@ def build_msop_packet(
     body += struct.pack("<I", 0x0EA82087)  # Timestamp
     body += struct.pack("<H", 0)           # Factory
 
-    packet = b"\x00" * 42 + bytes(body)    # 42B UDP/IP 头
-    assert len(packet) == 1248
+    packet = prefix + bytes(body)
+    assert len(packet) == len(prefix) + 1206
     return packet
 
 
 def test_packet_size_constant():
     assert MSOPParser.parse_packet(b"\x00" * 100) == []
     full = build_msop_packet([0.0] * 12)
-    assert len(full) == 1248
+    assert len(full) == 1206  # 真实 UDP 载荷长度，无网络头
 
 
 def test_parse_valid_packet_all_points():
@@ -94,7 +99,7 @@ def test_parse_skips_zero_distance():
                 block += struct.pack("<HBHB", 2300, 49, 0, 0)
         body += block
     body += struct.pack("<I", 0) + struct.pack("<H", 0)
-    packet = b"\x00" * 42 + bytes(body)
+    packet = bytes(body)
 
     pts = MSOPParser.parse_packet(packet)
     assert len(pts) == 192 - 1  # 只有 1 个无效点被跳过
@@ -112,7 +117,7 @@ def test_parse_skips_invalid_flag():
             block += struct.pack("<HBHB", 2300, 49, 0, 0)
         body += block
     body += struct.pack("<I", 0) + struct.pack("<H", 0)
-    packet = b"\x00" * 42 + bytes(body)
+    packet = bytes(body)
 
     pts = MSOPParser.parse_packet(packet)
     # 无效块整块跳过 -> 192 - 16 = 176
