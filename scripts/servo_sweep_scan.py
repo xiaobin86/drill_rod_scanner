@@ -6,14 +6,15 @@
 
 坐标系约定:
   雷达横装: x 向前, y 朝上, z 向右; 自转扫描弧在 x-y 竖直平面。
-  世界系: z 轴竖直（转盘旋转轴）, 与雷达系 y 轴同向。
-  转盘绕世界 z 轴水平旋转, 把不同时刻的竖直扫描弧聚合成 3D 扫描面。
-  因此拼接旋转轴默认 --axis y（= 世界 z）。
+  世界系: z 轴竖直（转盘旋转轴）, x/y 水平（转盘平面）。
+  坐标处理: 极坐标 -> 雷达系 xyz -> 横装变换(恒等) -> 偏心校正 -> to_world(雷达系->世界系)
+  -> 绕世界 z 轴（转盘轴）旋转, 把竖直扫描弧聚合成 3D 扫描面。
+  因此拼接旋转轴默认 --axis z（= 世界转盘轴）。
 
 用法:
   python scripts/servo_sweep_scan.py                          # 默认 500->1000, 步进10
   python scripts/servo_sweep_scan.py --port /dev/ttyUSB0 --start 100 --end 300 --step 20
-  python scripts/servo_sweep_scan.py --axis y --angle-start 0 --angle-end 180
+  python scripts/servo_sweep_scan.py --axis z --angle-start 0 --angle-end 180
   python scripts/servo_sweep_scan.py --dry-run                # 不连串口, 只打印指令
 """
 
@@ -67,6 +68,51 @@ def mount_transform(points: np.ndarray) -> np.ndarray:
     return points
 
 
+def to_world(points: np.ndarray) -> np.ndarray:
+    """横装雷达系 → 世界系（转盘系）。
+
+    雷达系（横装）：x 前、y 上、z 右。
+    世界系：z 竖直（转盘旋转轴）、x/y 水平（转盘平面）。
+    映射：世界 x=雷达 x（初始方位朝前）、世界 y=雷达 z、世界 z=雷达 y（朝上）。
+    若雷达初始方位不同，交换世界 x/y 或取反。
+    """
+    return points[:, [0, 2, 1]]  # (x, y, z) -> (x_radar, z_radar, y_radar)
+
+
+def create_ground_grid(
+    half_extent: float, step: float, z_level: float = 0.0
+) -> "o3d.geometry.LineSet":
+    """在世界系 z=z_level 水平面生成 x-y 网格线（静态背景）。
+
+    网格范围 [-half_extent, half_extent] × [-half_extent, half_extent]，
+    线间距 step。用于可视化时对照世界系水平面。
+    """
+    import open3d as o3d
+
+    ticks = np.arange(-half_extent, half_extent + step, step)
+    points: list[np.ndarray] = []
+    lines: list[tuple[int, int]] = []
+
+    # 平行 x 轴的线（固定 y，扫 x）
+    for y in ticks:
+        base = len(points)
+        points.append(np.array([-half_extent, y, z_level]))
+        points.append(np.array([half_extent, y, z_level]))
+        lines.append((base, base + 1))
+    # 平行 y 轴的线（固定 x，扫 y）
+    for x in ticks:
+        base = len(points)
+        points.append(np.array([x, -half_extent, z_level]))
+        points.append(np.array([x, half_extent, z_level]))
+        lines.append((base, base + 1))
+
+    line_set = o3d.geometry.LineSet()
+    line_set.points = o3d.utility.Vector3dVector(np.asarray(points))
+    line_set.lines = o3d.utility.Vector2iVector(np.asarray(lines))
+    line_set.paint_uniform_color([0.35, 0.35, 0.35])  # 灰色网格线
+    return line_set
+
+
 def servo_pos_to_angle(
     pos: int, start: int, end: int, angle_start: float, angle_end: float
 ) -> float:
@@ -89,8 +135,8 @@ def main() -> None:
     parser.add_argument("--interval", type=float, default=2.0, help="每个位置停留秒数")
     parser.add_argument("--move-time", type=int, default=2000, help="舵机移动耗时 T（ms）")
     parser.add_argument("--servo-id", type=int, default=0, help="舵机 ID")
-    parser.add_argument("--axis", default="y", choices=["x", "y", "z"],
-                        help="点云旋转轴（默认 y = 世界 z 竖直转盘轴）")
+    parser.add_argument("--axis", default="z", choices=["x", "y", "z"],
+                        help="绕世界系哪个轴旋转拼接（默认 z = 转盘竖直轴）")
     parser.add_argument("--angle-start", type=float, default=0.0,
                         help="start 位置对应的旋转角度（度）")
     parser.add_argument("--angle-end", type=float, default=180.0,
@@ -101,6 +147,9 @@ def main() -> None:
     parser.add_argument("--offset-z", type=float, default=0.0,
                         help="光心相对转盘轴心的 z 偏移（米，旋转前校正）")
     parser.add_argument("--max-range", type=float, default=50.0, help="最大显示距离（米）")
+    parser.add_argument("--grid", type=float, default=0.0,
+                        help="世界系水平面网格半宽（米），0 表示不画网格")
+    parser.add_argument("--grid-step", type=float, default=1.0, help="网格线间距（米）")
     parser.add_argument("--dry-run", action="store_true", help="只打印舵机指令不连串口")
     parser.add_argument("--debug", action="store_true", help="打印每包诊断信息")
     args = parser.parse_args()
@@ -121,6 +170,12 @@ def main() -> None:
     vis = o3d.visualization.Visualizer()
     vis.create_window(window_name="Servo Sweep Scan", width=900, height=700)
     vis.get_render_option().background_color = np.array([0.0, 0.0, 0.0])  # 黑色背景
+
+    # 世界系 z=0 水平面网格（静态背景，画一次即可）
+    grid = None
+    if args.grid > 0.0:
+        grid = create_ground_grid(args.grid, args.grid_step, z_level=0.0)
+        vis.add_geometry(grid)
 
     # 预分配固定大小缓冲：点数永不变，避免每帧 remove/add 重建 GPU 缓冲导致的卡顿。
     # 未用部分以 NaN 填充，Open3D 渲染时跳过且不参与包围盒。
@@ -159,9 +214,12 @@ def main() -> None:
                                        args.angle_start, args.angle_end)
             # ② 横装变换（出厂系 → 横装系，数学上恒等）
             frame = mount_transform(frame)
-            # ③ 光心偏心校正：平移到转盘轴心，再绕转盘轴旋转
+            # ③ 光心偏心校正：平移到转盘轴心
             frame[:, 0] -= args.offset_x
             frame[:, 2] -= args.offset_z
+            # ④ 雷达系 → 世界系（z 竖直 = 转盘轴）
+            frame = to_world(frame)
+            # ⑤ 绕世界 z 轴（转盘轴）旋转，聚合 3D 扫描面
             rotated = rotate_points(frame, args.axis, angle)
 
             # 增量写入固定缓冲，避免 vstack 全量复制

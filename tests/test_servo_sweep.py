@@ -3,7 +3,42 @@
 import numpy as np
 import pytest
 
-from scripts.servo_sweep_scan import rotation_matrix, rotate_points, servo_pos_to_angle
+from scripts.servo_sweep_scan import (
+    mount_transform,
+    rotation_matrix,
+    rotate_points,
+    servo_pos_to_angle,
+    to_world,
+)
+
+
+def test_mount_transform_identity():
+    # 横装变换数学上恒等（扫描面固定在雷达 x-y 平面，坐标系跟随雷达）
+    pts = np.array([[1.0, 2.0, 3.0], [-1.0, 0.5, 0.0]])
+    out = mount_transform(pts)
+    np.testing.assert_allclose(out, pts)
+
+
+def test_to_world_axis_mapping():
+    # 雷达系 (x前, y上, z右) -> 世界系 (z竖, x/y水平)
+    # 世界 x=雷达 x, 世界 y=雷达 z, 世界 z=雷达 y
+    pts = np.array([
+        [1.0, 0.0, 0.0],   # 雷达 x（前）-> 世界 x
+        [0.0, 1.0, 0.0],   # 雷达 y（上）-> 世界 z
+        [0.0, 0.0, 1.0],   # 雷达 z（右）-> 世界 y
+    ])
+    out = to_world(pts)
+    np.testing.assert_allclose(out[0], [1.0, 0.0, 0.0], atol=1e-9)
+    np.testing.assert_allclose(out[1], [0.0, 0.0, 1.0], atol=1e-9)
+    np.testing.assert_allclose(out[2], [0.0, 1.0, 0.0], atol=1e-9)
+
+
+def test_to_world_then_rotate_z():
+    # 雷达前方点 (1,0,0) -> 世界 (1,0,0), 绕世界 z 转 90° -> (0,1,0)
+    # 即竖直扫描弧绕世界 z（转盘轴）扫出水平扇面
+    pts = to_world(np.array([[1.0, 0.0, 0.0]]))
+    out = rotate_points(pts, "z", 90.0)
+    np.testing.assert_allclose(out[0], [0.0, 1.0, 0.0], atol=1e-9)
 
 
 def test_rotation_matrix_x_90deg():
