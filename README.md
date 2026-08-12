@@ -17,3 +17,16 @@ python scripts/run_scan.py --config config/scanner.yaml
 - `drill_rod_scanner/stitching/` 点云拼接算法
 - `drill_rod_scanner/scanner.py` 扫描编排器
 - `config/scanner.yaml` 运行配置
+
+## 测试
+
+```bash
+conda activate drill_rod_scanner
+pytest tests/ -v
+```
+
+## 当前状态
+
+- 点云拼接算法已完整实现并通过单测（不依赖硬件）。
+- 舵机/雷达串口协议命令待补充：`drill_rod_scanner/servo/serial_servo.py`
+  与 `drill_rod_scanner/lidar/serial_lidar.py` 中的 `TODO(用户补充)` 标记处。
