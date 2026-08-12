@@ -84,8 +84,10 @@ def main() -> None:
     parser.add_argument("--angle-end", type=float, default=180.0,
                         help="end 位置对应的旋转角度（度）")
     parser.add_argument("--lidar-port", type=int, default=2368, help="雷达数据端口")
+    parser.add_argument("--offset-x", type=float, default=0.0,
+                        help="光心相对转盘轴心的 x 偏移（米，旋转前校正）")
     parser.add_argument("--offset-z", type=float, default=0.0,
-                        help="雷达安装 z 偏移（米，相对转盘轴）")
+                        help="光心相对转盘轴心的 z 偏移（米，旋转前校正）")
     parser.add_argument("--max-range", type=float, default=50.0, help="最大显示距离（米）")
     parser.add_argument("--dry-run", action="store_true", help="只打印舵机指令不连串口")
     parser.add_argument("--debug", action="store_true", help="打印每包诊断信息")
@@ -132,7 +134,7 @@ def main() -> None:
                 print(f"  [skip] 位置 {pos}: 雷达无数据")
                 continue
 
-            frame = scan_to_xy(scan, offset_z_m=args.offset_z)
+            frame = scan_to_xy(scan)
             dist = np.linalg.norm(frame[:, :2], axis=1)
             frame = frame[dist <= args.max_range]
             if frame.shape[0] == 0:
@@ -141,6 +143,9 @@ def main() -> None:
 
             angle = servo_pos_to_angle(pos, args.start, args.end,
                                        args.angle_start, args.angle_end)
+            # 光心偏移校正：把光心系点云平移到转盘轴心，再绕轴旋转
+            frame[:, 0] -= args.offset_x
+            frame[:, 2] -= args.offset_z
             rotated = rotate_points(frame, args.axis, angle)
 
             # 增量写入固定缓冲，避免 vstack 全量复制
