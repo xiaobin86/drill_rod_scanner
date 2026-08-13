@@ -31,7 +31,7 @@
 </style>
 </head>
 <body>
-<div id="info">偏心补偿原理：光心绕转盘轴做圆弧运动，同一世界点在不同角度测距不同</div>
+<div id="info">偏心补偿原理：光心绕转盘轴做圆弧运动。拖动下方滑块可调转盘角 θ 与偏心距 d，观察无/有补偿差异</div>
 <div id="legend">
   <div><span class="dot" style="background:#888;"></span>转盘轴心 O</div>
   <div><span class="dot" style="background:#2a7de1;"></span>光心 C（绕轴圆弧）</div>
@@ -42,6 +42,8 @@
 <div id="panel">
   <label>转盘角度 θ <input type="range" id="theta" min="0" max="360" value="0" step="1"></label>
   <span id="thetaVal">0°</span>
+  <label>偏心 d <input type="range" id="ecc" min="0" max="150" value="55" step="5"></label>
+  <span id="eccVal">5.5cm</span>
   <button id="compBtn" class="active">补偿：开</button>
   <button id="autoBtn">自动旋转</button>
 </div>
@@ -49,8 +51,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script>
-// 常量：光心偏心（放大展示用）与代码一致
-var D = 0.055;        // 光心偏心 5.5cm
+// 常量：与代码一致；D 为可变偏心距（滑块调整）
+var D = 0.055;        // 光心偏心初始 5.5cm
 var P_TRUE = new THREE.Vector3(2.0, 0.5, 0.0);  // 世界固定点（墙上）
 
 var scene = new THREE.Scene();
@@ -87,16 +89,21 @@ var axisMesh = new THREE.Mesh(axisGeo, axisMat);
 scene.add(axisMesh);
 var axisLabel = makeLabel("O 转盘轴心", 0x888888);
 
-// 光心圆弧轨迹（半径 D）
+// 光心圆弧轨迹（半径随 D 可变，滑块调整后重建）
 var arcPts = [];
-for (var a = 0; a <= 360; a += 5) {
-  var rad = a * Math.PI / 180;
-  arcPts.push(new THREE.Vector3(D * Math.cos(rad), 0, D * Math.sin(rad)));
-}
-var arcGeo = new THREE.BufferGeometry().setFromPoints(arcPts);
+var arcGeo = new THREE.BufferGeometry();
 var arcLine = new THREE.Line(arcGeo, new THREE.LineBasicMaterial({ color: 0x2a7de1, dashSize: 0.02, gapSize: 0.02 }));
-arcLine.computeLineDistances();
 scene.add(arcLine);
+
+function rebuildArc() {
+  arcPts.length = 0;
+  for (var a = 0; a <= 360; a += 5) {
+    var rad = a * Math.PI / 180;
+    arcPts.push(new THREE.Vector3(D * Math.cos(rad), 0, D * Math.sin(rad)));
+  }
+  arcLine.geometry.setFromPoints(arcPts);
+  arcLine.computeLineDistances();
+}
 
 // 光心球 C
 var lightGeo = new THREE.SphereGeometry(0.05, 16, 16);
@@ -138,6 +145,11 @@ document.getElementById("theta").addEventListener("input", function (e) {
   thetaDeg = parseFloat(e.target.value);
   document.getElementById("thetaVal").textContent = thetaDeg.toFixed(0) + "°";
 });
+document.getElementById("ecc").addEventListener("input", function (e) {
+  D = parseFloat(e.target.value) / 1000;  // 滑块单位 mm → m
+  document.getElementById("eccVal").textContent = (D * 100).toFixed(1) + "cm";
+  rebuildArc();
+});
 document.getElementById("compBtn").addEventListener("click", function () {
   compensate = !compensate;
   this.textContent = "补偿：" + (compensate ? "开" : "关");
@@ -147,6 +159,9 @@ document.getElementById("autoBtn").addEventListener("click", function () {
   autoRotate = !autoRotate;
   this.textContent = autoRotate ? "停止旋转" : "自动旋转";
 });
+
+// 初始圆弧
+rebuildArc();
 
 // 绕转盘轴（Three.js Y）旋转
 function rotY(v, deg) {
