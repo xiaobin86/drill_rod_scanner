@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>偏心补偿原理 - 3D 交互演示</title>
+<style>
+  body { margin: 0; overflow: hidden; font-family: "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; }
+  #info {
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.75); color: #fff; padding: 8px 18px; border-radius: 8px;
+    font-size: 15px; z-index: 10; text-align: center; pointer-events: none;
+  }
+  #panel {
+    position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.8); color: #fff; padding: 12px 20px; border-radius: 10px;
+    z-index: 10; display: flex; gap: 20px; align-items: center; font-size: 14px;
+  }
+  #panel label { display: flex; align-items: center; gap: 8px; }
+  #panel input[type=range] { width: 180px; }
+  #panel button {
+    background: #2a7de1; color: #fff; border: none; padding: 8px 16px;
+    border-radius: 6px; cursor: pointer; font-size: 14px;
+  }
+  #panel button.active { background: #e1a52a; }
+  #legend {
+    position: absolute; top: 60px; right: 16px; background: rgba(0,0,0,0.7);
+    color: #fff; padding: 10px 14px; border-radius: 8px; font-size: 13px;
+    line-height: 1.9; z-index: 10;
+  }
+  .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+</style>
+</head>
+<body>
+<div id="info">偏心补偿原理：光心绕转盘轴做圆弧运动，同一世界点在不同角度测距不同</div>
+<div id="legend">
+  <div><span class="dot" style="background:#888;"></span>转盘轴心 O</div>
+  <div><span class="dot" style="background:#2a7de1;"></span>光心 C（绕轴圆弧）</div>
+  <div><span class="dot" style="background:#2ecc71;"></span>世界固定点 P（真值）</div>
+  <div><span class="dot" style="background:#e74c3c;"></span>无补偿重建（散开成环）</div>
+  <div><span class="dot" style="background:#f1c40f;"></span>有补偿重建（精确回 P）</div>
+</div>
+<div id="panel">
+  <label>转盘角度 θ <input type="range" id="theta" min="0" max="360" value="0" step="1"></label>
+  <span id="thetaVal">0°</span>
+  <button id="compBtn" class="active">补偿：开</button>
+  <button id="autoBtn">自动旋转</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+// 常量：光心偏心（放大展示用）与代码一致
+var D = 0.055;        // 光心偏心 5.5cm
+var P_TRUE = new THREE.Vector3(2.0, 0.5, 0.0);  // 世界固定点（墙上）
+
+var scene = new THREE.Scene();
+scene.background = new THREE.Color(0x111418);
+var camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.01, 100);
+camera.position.set(3.0, 2.2, 3.2);
+camera.lookAt(0, 0.5, 0);
+var renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+var controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.5, 0);
+
+// 光源
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+var dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight.position.set(3, 5, 3);
+scene.add(dirLight);
+
+// 地面网格
+var grid = new THREE.GridHelper(6, 12, 0x555555, 0x333333);
+grid.position.y = 0;
+scene.add(grid);
+
+// 世界坐标轴（Three.js: X 红 Y 绿 Z 蓝；映射代码世界 z竖直→Three y）
+var axes = new THREE.AxesHelper(1.5);
+scene.add(axes);
+
+// 转盘轴心 O（细圆柱，沿 Three.js Y = 代码世界 z 竖直）
+var axisGeo = new THREE.CylinderGeometry(0.03, 0.03, 3.0, 16);
+var axisMat = new THREE.MeshPhongMaterial({ color: 0x888888 });
+var axisMesh = new THREE.Mesh(axisGeo, axisMat);
+scene.add(axisMesh);
+var axisLabel = makeLabel("O 转盘轴心", 0x888888);
+
+// 光心圆弧轨迹（半径 D）
+var arcPts = [];
+for (var a = 0; a <= 360; a += 5) {
+  var rad = a * Math.PI / 180;
+  arcPts.push(new THREE.Vector3(D * Math.cos(rad), 0, D * Math.sin(rad)));
+}
+var arcGeo = new THREE.BufferGeometry().setFromPoints(arcPts);
+var arcLine = new THREE.Line(arcGeo, new THREE.LineBasicMaterial({ color: 0x2a7de1, dashSize: 0.02, gapSize: 0.02 }));
+arcLine.computeLineDistances();
+scene.add(arcLine);
+
+// 光心球 C
+var lightGeo = new THREE.SphereGeometry(0.05, 16, 16);
+var lightMat = new THREE.MeshPhongMaterial({ color: 0x2a7de1 });
+var lightMesh = new THREE.Mesh(lightGeo, lightMat);
+scene.add(lightMesh);
+
+// 世界固定点 P（真值，绿色）
+var pTrueGeo = new THREE.SphereGeometry(0.06, 16, 16);
+var pTrueMesh = new THREE.Mesh(pTrueGeo, new THREE.MeshPhongMaterial({ color: 0x2ecc71 }));
+pTrueMesh.position.copy(P_TRUE);
+scene.add(pTrueMesh);
+
+// 无补偿重建点（红）
+var badGeo = new THREE.SphereGeometry(0.05, 16, 16);
+var badMat = new THREE.MeshPhongMaterial({ color: 0xe74c3c });
+var badMesh = new THREE.Mesh(badGeo, badMat);
+scene.add(badMesh);
+
+// 有补偿重建点（黄）
+var okGeo = new THREE.SphereGeometry(0.05, 16, 16);
+var okMesh = new THREE.Mesh(okGeo, new THREE.MeshPhongMaterial({ color: 0xf1c40f }));
+okMesh.position.copy(P_TRUE);
+scene.add(okMesh);
+
+// 测距连线（光心→P）与误差线
+var lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 });
+var errLineMat = new THREE.LineBasicMaterial({ color: 0xe74c3c, transparent: true, opacity: 0.8 });
+var measureLine = new THREE.Line(new THREE.BufferGeometry(), lineMat);
+var errLine = new THREE.Line(new THREE.BufferGeometry(), errLineMat);
+scene.add(measureLine);
+scene.add(errLine);
+
+var compensate = true;
+var autoRotate = false;
+var thetaDeg = 0;
+
+document.getElementById("theta").addEventListener("input", function (e) {
+  thetaDeg = parseFloat(e.target.value);
+  document.getElementById("thetaVal").textContent = thetaDeg.toFixed(0) + "°";
+});
+document.getElementById("compBtn").addEventListener("click", function () {
+  compensate = !compensate;
+  this.textContent = "补偿：" + (compensate ? "开" : "关");
+  this.classList.toggle("active", compensate);
+});
+document.getElementById("autoBtn").addEventListener("click", function () {
+  autoRotate = !autoRotate;
+  this.textContent = autoRotate ? "停止旋转" : "自动旋转";
+});
+
+// 绕转盘轴（Three.js Y）旋转
+function rotY(v, deg) {
+  var rad = deg * Math.PI / 180;
+  var c = Math.cos(rad), s = Math.sin(rad);
+  return new THREE.Vector3(c * v.x + s * v.z, v.y, -s * v.x + c * v.z);
+}
+
+function update() {
+  var th = thetaDeg;
+  // 光心偏移 d 在雷达系 x 方向；光心绕轴(Three Y)圆弧
+  var dVec = new THREE.Vector3(D, 0, 0);
+  var C = rotY(dVec, th);   // 光心圆弧位置（等价于 Rz(θ)·d）
+
+  lightMesh.position.copy(C);
+  axisLabel.position.set(0, 1.8, 0);
+
+  // 雷达系测量 p = Rz(-θ)·(P - C)
+  var diff = P_TRUE.clone().sub(C);
+  var pRadar = rotY(diff, -th);
+
+  // 无补偿重建: Rz(θ)·p = P - C
+  var bad = rotY(pRadar, th);
+  // 有补偿重建: Rz(θ)·(p + d) = P
+  var ok = rotY(pRadar.clone().add(dVec), th);
+
+  badMesh.position.copy(bad);
+  okMesh.position.copy(ok);
+
+  // 测距线：光心 → P（真实测量）
+  var mL = measureLine.geometry.attributes.position;
+  measureLine.geometry.setFromPoints([C, P_TRUE]);
+  // 误差线：光心 → 无补偿重建点（红色，显示错位量）
+  errLine.geometry.setFromPoints([C, bad]);
+
+  // 更新标签
+  updateLabel(pTrueMesh, "P 真值");
+  updateLabel(badMesh, "无补偿");
+  updateLabel(okMesh, "有补偿");
+  updateLabel(lightMesh, "光心");
+
+  // 补偿关闭时隐藏黄色 OK 点，补偿开启时隐藏红色 bad 点
+  badMesh.visible = compensate;
+  okMesh.visible = !compensate;
+}
+
+// 3D 文字标签：固定 4 个 Sprite，逐帧更新位置（避免重复创建导致残影）
+var labelCache = {};
+function makeLabel(text, color) {
+  var canvas = document.createElement("canvas");
+  canvas.width = 256; canvas.height = 64;
+  var ctx = canvas.getContext("2d");
+  ctx.font = "28px sans-serif";
+  ctx.fillStyle = "#fff";
+  ctx.textAlign = "center";
+  ctx.fillText(text, 128, 40);
+  var tex = new THREE.CanvasTexture(canvas);
+  var sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }));
+  sprite.scale.set(1.0, 0.25, 1);
+  scene.add(sprite);
+  return sprite;
+}
+
+function updateLabel(mesh, text) {
+  if (!labelCache[mesh.uuid]) {
+    labelCache[mesh.uuid] = makeLabel(text, 0xffffff);
+  }
+  var s = labelCache[mesh.uuid];
+  s.position.set(mesh.position.x, mesh.position.y + 0.15, mesh.position.z);
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  if (autoRotate) {
+    thetaDeg = (thetaDeg + 0.5) % 360;
+    document.getElementById("theta").value = thetaDeg;
+    document.getElementById("thetaVal").textContent = thetaDeg.toFixed(0) + "°";
+  }
+  update();
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener("resize", function () {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
