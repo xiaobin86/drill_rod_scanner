@@ -6,3 +6,9 @@ build/
 .venv/
 output/
 .pytest_cache/
+
+# 工具目录
+.omo/
+docs/.obsidian/
+docs/.claudian/
+docs/.omo/

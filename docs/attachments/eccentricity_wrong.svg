@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="760" viewBox="0 0 1000 760" font-family="'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">
+<text x="24.0" y="34.0" font-size="19" fill="#34495e" text-anchor="start" font-weight="bold" font-style="">图 3 · 错误公式：P′ = Rz(θ)·T·(p − d)  →  每个点糊成半径 2|d| 的圆</text>
+<text x="24.0" y="56.0" font-size="12.5" fill="#7f8c8d" text-anchor="start" font-weight="normal" font-style="">同一点从不同转盘角度重建到圆周不同位置；d = 5.5cm（图中 4× 放大）</text>
+<circle cx="250.0" cy="400.0" r="135.0" fill="#f4f4f4" stroke="#c8c8c8" stroke-width="1.5" opacity="1.0"/>
+<line x1="239.0" y1="400.0" x2="261.0" y2="400.0" stroke="#999" stroke-width="1.5" opacity="1.0"/>
+<line x1="250.0" y1="389.0" x2="250.0" y2="411.0" stroke="#999" stroke-width="1.5" opacity="1.0"/>
+<text x="250.0" y="432.0" font-size="12.5" fill="#555" text-anchor="middle" font-weight="normal" font-style="">转盘旋转轴 O</text>
+<circle cx="550.0" cy="400.0" r="6.5" fill="#27ae60" stroke="#333" stroke-width="1.5" opacity="1.0"/>
+<line x1="537.0" y1="400.0" x2="563.0" y2="400.0" stroke="#27ae60" stroke-width="1.5" opacity="1.0"/>
+<line x1="550.0" y1="387.0" x2="550.0" y2="413.0" stroke="#27ae60" stroke-width="1.5" opacity="1.0"/>
+<text x="536.0" y="376.0" font-size="13" fill="#27ae60" text-anchor="end" font-weight="bold" font-style="">世界点 P（正确位置）</text>
+<text x="536.0" y="440.0" font-size="11.5" fill="#27ae60" text-anchor="end" font-weight="normal" font-style="">所有帧的正确重建都应回到这里</text>
+<circle cx="550.0" cy="400.0" r="66.0" fill="none" stroke="#c0392b" stroke-width="2" stroke-dasharray="7 5" opacity="1.0"/>
+<text x="550.0" y="318.0" font-size="12.5" fill="#c0392b" text-anchor="middle" font-weight="normal" font-style="">漂移轨迹圆：半径 2|d|（以 P 为圆心）</text>
+<line x1="476.0" y1="400.0" x2="492.0" y2="400.0" stroke="#c0392b" stroke-width="2.5" opacity="1.0"/>
+<line x1="484.0" y1="392.0" x2="484.0" y2="408.0" stroke="#c0392b" stroke-width="2.5" opacity="1.0"/>
+<text x="484.0" y="388.0" font-size="11" fill="#c0392b" text-anchor="middle" font-weight="normal" font-style="">θ=0°</text>
+<line x1="509.0" y1="457.2" x2="525.0" y2="457.2" stroke="#c0392b" stroke-width="2.5" opacity="1.0"/>
+<line x1="517.0" y1="449.2" x2="517.0" y2="465.2" stroke="#c0392b" stroke-width="2.5" opacity="1.0"/>
+<text x="517.0" y="445.2" font-size="11" fill="#c0392b" text-anchor="middle" font-weight="normal" font-style="">θ=60°</text>
+<line x1="575.0" y1="457.2" x2="591.0" y2="457.2" stroke="#c0392b" stroke-width="2.5" opacity="1.0"/>
+<line x1="583.0" y1="449.2" x2="583.0" y2="465.2" stroke="#c0392b" stroke-width="2.5" opacity="1.0"/>
+<text x="583.0" y="445.2" font-size="11" fill="#c0392b" text-anchor="middle" font-weight="normal" font-style="">θ=120°</text>
+<line x1="608.0" y1="400.0" x2="624.0" y2="400.0" stroke="#c0392b" stroke-width="2.5" opacity="1.0"/>
+<line x1="616.0" y1="392.0" x2="616.0" y2="408.0" stroke="#c0392b" stroke-width="2.5" opacity="1.0"/>
+<text x="616.0" y="388.0" font-size="11" fill="#c0392b" text-anchor="middle" font-weight="normal" font-style="">θ=180°</text>
+<line x1="575.0" y1="342.8" x2="591.0" y2="342.8" stroke="#c0392b" stroke-width="2.5" opacity="1.0"/>
+<line x1="583.0" y1="334.8" x2="583.0" y2="350.8" stroke="#c0392b" stroke-width="2.5" opacity="1.0"/>
+<text x="583.0" y="330.8" font-size="11" fill="#c0392b" text-anchor="middle" font-weight="normal" font-style="">θ=240°</text>
+<line x1="509.0" y1="342.8" x2="525.0" y2="342.8" stroke="#c0392b" stroke-width="2.5" opacity="1.0"/>
+<line x1="517.0" y1="334.8" x2="517.0" y2="350.8" stroke="#c0392b" stroke-width="2.5" opacity="1.0"/>
+<text x="517.0" y="330.8" font-size="11" fill="#c0392b" text-anchor="middle" font-weight="normal" font-style="">θ=300°</text>
+<line x1="542.0" y1="396.0" x2="517.0" y2="457.2" stroke="#c0392b" stroke-width="2.5" opacity="1.0"/>
+<path d="M 517.0 457.2 L 524.6 450.5 L 516.2 447.1 Z" fill="#c0392b" opacity="1.0"/>
+<text x="529.5" y="418.6" font-size="12.5" fill="#c0392b" text-anchor="end" font-weight="normal" font-style="">漂移量 −2·Rz(θ)·T·d</text>
+<g transform="translate(283.0,400.0) rotate(0.0)">
+<rect x="-16" y="-11" width="32" height="22" rx="4" fill="#eceff1" stroke="#34495e" stroke-width="1.5"/>
+<circle cx="4" cy="0" r="6" fill="#b0bec5" stroke="#34495e" stroke-width="1.2"/>
+<path d="M 14 0 L 26 0" stroke="#34495e" stroke-width="2"/>
+<path d="M 26 0 L 21 -4 M 26 0 L 21 4" stroke="#34495e" stroke-width="2" fill="none"/>
+</g>
+<text x="283.0" y="436.0" font-size="11.5" fill="#7f8c8d" text-anchor="middle" font-weight="normal" font-style="">光心 C（θ=0°）</text>
+<rect x="470.0" y="640.0" width="500.0" height="92.0" rx="8" fill="#fdf0ef" stroke="#e3b9b5" opacity="1.0"/>
+<text x="486.0" y="664.0" font-size="13" fill="#34495e" text-anchor="start" font-weight="bold" font-style="">推导：</text>
+<text x="486.0" y="686.0" font-size="12" fill="#333" text-anchor="start" font-weight="normal" font-style="">P′ = Rz(θ)·T·(p − d) = Rz(θ)·T·p − Rz(θ)·T·d</text>
+<text x="486.0" y="706.0" font-size="12" fill="#333" text-anchor="start" font-weight="normal" font-style="">   = P − 2·Rz(θ)·T·d   →  θ 变，P′ 绕 P 转圈</text>
+<text x="486.0" y="726.0" font-size="12" fill="#c0392b" text-anchor="start" font-weight="normal" font-style="">每帧同一点被放到圆上不同位置 → 拼接后变圆环</text>
+<text x="30.0" y="735.0" font-size="13" fill="#333" text-anchor="start" font-weight="normal" font-style="">竖直方向高度不变 → 3D 中每个原始点都糊成水平圆环，点云呈现“各圆柱面”漂移（见下页）。</text>
+</svg>

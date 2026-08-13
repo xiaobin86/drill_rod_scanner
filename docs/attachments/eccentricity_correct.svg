@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="740" viewBox="0 0 1120 740" font-family="'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif">
+<text x="24.0" y="34.0" font-size="19" fill="#34495e" text-anchor="start" font-weight="bold" font-style="">图 2 · 正确公式：P = Rz(θ)·T·(p + d)  ——  先加 d，再旋转</text>
+<text x="24.0" y="56.0" font-size="12.5" fill="#7f8c8d" text-anchor="start" font-weight="normal" font-style="">左：θ=0°（雷达系=世界系）可直观看到 p+d=P；右：θ=90° 一般情形（d 为雷达系常量）</text>
+<text x="230.0" y="60.0" font-size="15" fill="#34495e" text-anchor="middle" font-weight="bold" font-style="">θ = 0°：Rz = I，雷达系 = 世界系</text>
+<circle cx="230.0" cy="390.0" r="4.0" fill="#34495e" stroke="#333" stroke-width="1.5" opacity="1.0"/>
+<line x1="221.0" y1="390.0" x2="239.0" y2="390.0" stroke="#999" stroke-width="1.5" opacity="1.0"/>
+<line x1="230.0" y1="381.0" x2="230.0" y2="399.0" stroke="#999" stroke-width="1.5" opacity="1.0"/>
+<line x1="230.0" y1="390.0" x2="286.0" y2="390.0" stroke="#c0392b" stroke-width="2" opacity="1.0"/>
+<path d="M 286.0 390.0 L 278.0 386.0 L 278.0 394.0 Z" fill="#c0392b" opacity="1.0"/>
+<line x1="230.0" y1="390.0" x2="230.0" y2="334.0" stroke="#27ae60" stroke-width="2" opacity="1.0"/>
+<path d="M 230.0 334.0 L 226.0 342.0 L 234.0 342.0 Z" fill="#27ae60" opacity="1.0"/>
+<text x="236.0" y="324.0" font-size="11.5" fill="#27ae60" text-anchor="start" font-weight="normal" font-style="">世界 y / 雷达 z（右）</text>
+<text x="340.0" y="414.0" font-size="11.5" fill="#c0392b" text-anchor="start" font-weight="normal" font-style="">世界 x / 雷达 x（前）</text>
+<g transform="translate(260.8,390.0) rotate(0.0)">
+<rect x="-16" y="-11" width="32" height="22" rx="4" fill="#dfe6e9" stroke="#34495e" stroke-width="1.5"/>
+<circle cx="4" cy="0" r="6" fill="#95a5a6" stroke="#34495e" stroke-width="1.2"/>
+<path d="M 14 0 L 26 0" stroke="#34495e" stroke-width="2"/>
+<path d="M 26 0 L 21 -4 M 26 0 L 21 4" stroke="#34495e" stroke-width="2" fill="none"/>
+</g>
+<text x="260.8" y="435.0" font-size="12" fill="#34495e" text-anchor="middle" font-weight="normal" font-style="">光心 C = d</text>
+<line x1="230.0" y1="390.0" x2="260.8" y2="390.0" stroke="#e67e22" stroke-width="3.5" opacity="1.0"/>
+<path d="M 260.8 390.0 L 250.8 385.0 L 250.8 395.0 Z" fill="#e67e22" opacity="1.0"/>
+<text x="255.0" y="372.0" font-size="12.5" fill="#e67e22" text-anchor="middle" font-weight="normal" font-style="">d（偏心）</text>
+<line x1="284.8" y1="390.0" x2="500.0" y2="390.0" stroke="#2980b9" stroke-width="3" opacity="1.0"/>
+<path d="M 500.0 390.0 L 490.0 385.0 L 490.0 395.0 Z" fill="#2980b9" opacity="1.0"/>
+<text x="385.0" y="372.0" font-size="12.5" fill="#2980b9" text-anchor="middle" font-weight="normal" font-style="">p（雷达测量）</text>
+<line x1="230.0" y1="390.0" x2="502.0" y2="390.0" stroke="#27ae60" stroke-width="3.5" stroke-dasharray="9 5" opacity="1.0"/>
+<path d="M 502.0 390.0 L 490.0 384.0 L 490.0 396.0 Z" fill="#27ae60" opacity="1.0"/>
+<text x="330.0" y="348.0" font-size="13" fill="#27ae60" text-anchor="start" font-weight="bold" font-style="">P = p + d ✓（首尾相接）</text>
+<circle cx="510.0" cy="390.0" r="5.5" fill="#27ae60" stroke="#333" stroke-width="1.5" opacity="1.0"/>
+<line x1="499.0" y1="390.0" x2="521.0" y2="390.0" stroke="#27ae60" stroke-width="1.5" opacity="1.0"/>
+<line x1="510.0" y1="379.0" x2="510.0" y2="401.0" stroke="#27ae60" stroke-width="1.5" opacity="1.0"/>
+<text x="498.0" y="372.0" font-size="14" fill="#27ae60" text-anchor="end" font-weight="bold" font-style="">P</text>
+<text x="760.0" y="60.0" font-size="15" fill="#34495e" text-anchor="middle" font-weight="bold" font-style="">θ = 90°：一般情形</text>
+<circle cx="760.0" cy="390.0" r="4.0" fill="#34495e" stroke="#333" stroke-width="1.5" opacity="1.0"/>
+<line x1="751.0" y1="390.0" x2="769.0" y2="390.0" stroke="#999" stroke-width="1.5" opacity="1.0"/>
+<line x1="760.0" y1="381.0" x2="760.0" y2="399.0" stroke="#999" stroke-width="1.5" opacity="1.0"/>
+<line x1="760.0" y1="390.0" x2="816.0" y2="390.0" stroke="#c0392b" stroke-width="2" opacity="1.0"/>
+<path d="M 816.0 390.0 L 808.0 386.0 L 808.0 394.0 Z" fill="#c0392b" opacity="1.0"/>
+<line x1="760.0" y1="390.0" x2="760.0" y2="334.0" stroke="#27ae60" stroke-width="2" opacity="1.0"/>
+<path d="M 760.0 334.0 L 756.0 342.0 L 764.0 342.0 Z" fill="#27ae60" opacity="1.0"/>
+<text x="766.0" y="324.0" font-size="11.5" fill="#27ae60" text-anchor="start" font-weight="normal" font-style="">世界 y</text>
+<text x="870.0" y="414.0" font-size="11.5" fill="#c0392b" text-anchor="start" font-weight="normal" font-style="">世界 x</text>
+<circle cx="760.0" cy="390.0" r="30.8" fill="none" stroke="#e67e22" stroke-width="1.5" stroke-dasharray="6 5" opacity="0.6"/>
+<g transform="translate(760.0,359.2) rotate(-90.0)">
+<rect x="-16" y="-11" width="32" height="22" rx="4" fill="#dfe6e9" stroke="#34495e" stroke-width="1.5"/>
+<circle cx="4" cy="0" r="6" fill="#95a5a6" stroke="#34495e" stroke-width="1.2"/>
+<path d="M 14 0 L 26 0" stroke="#34495e" stroke-width="2"/>
+<path d="M 26 0 L 21 -4 M 26 0 L 21 4" stroke="#34495e" stroke-width="2" fill="none"/>
+</g>
+<text x="706.0" y="362.0" font-size="12" fill="#e67e22" text-anchor="end" font-weight="normal" font-style="">光心 C′ = Rz(θ)·T·d</text>
+<line x1="760.0" y1="390.0" x2="760.0" y2="359.2" stroke="#e67e22" stroke-width="2.5" stroke-dasharray="6 4" opacity="0.9"/>
+<path d="M 760.0 359.2 L 756.0 367.2 L 764.0 367.2 Z" fill="#e67e22" opacity="0.9"/>
+<line x1="780.0" y1="367.2" x2="1032.0" y2="388.0" stroke="#2980b9" stroke-width="2.5" stroke-dasharray="6 4" opacity="1.0"/>
+<path d="M 1032.0 388.0 L 1023.4 382.8 L 1022.7 391.7 Z" fill="#2980b9" opacity="1.0"/>
+<text x="890.0" y="372.0" font-size="12" fill="#2980b9" text-anchor="middle" font-weight="normal" font-style="">p′（雷达系测量）</text>
+<line x1="760.0" y1="390.0" x2="760.0" y2="670.0" stroke="#8e44ad" stroke-width="2.5" stroke-dasharray="8 5" opacity="0.8"/>
+<path d="M 760.0 670.0 L 765.0 660.0 L 755.0 660.0 Z" fill="#8e44ad" opacity="0.8"/>
+<text x="744.0" y="530.0" font-size="12.5" fill="#8e44ad" text-anchor="end" font-weight="normal" font-style="">T·(p′+d) = Rz(−θ)·P</text>
+<path d="M 878.1 411.1 L 702.2 284.8 L 714.4 501.0 L 875.0 355.7 L 661.1 322.1 L 769.3 509.6 L 847.3 307.6 L 641.1 373.9 L 822.1 492.7 L 800.8 277.2 L 646.5 429.1 L 861.7 453.7 L 745.7 270.9 L 676.3 476.0 L 879.5 401.1 L 693.6 290.0 L 723.9 504.5 L 871.7 346.2 L 655.7 330.6 L 779.3 508.4 L 840.0 300.6 L 640.2 383.9 L 830.5 487.1 L 791.2 274.1 L 650.2 438.5 L 866.7 444.9 L 735.7 272.5 L 683.8 482.7 L 880.0 391.1 L 685.4 296.0 L 733.7 507.1 L 867.6 336.9 L 651.1 339.6 L 789.2 506.4 L 832.2 294.2 L 640.1 394.0 L 838.4 480.8 L 781.4 271.9 L 654.7 447.5 L 870.9 435.8 L 726.0 274.9" stroke="#8e44ad" stroke-width="2.5" fill="none"/>
+<line x1="870.9" y1="435.8" x2="726.0" y2="274.9" stroke="#8e44ad" stroke-width="2.5" opacity="1.0"/>
+<path d="M 726.0 274.9 L 728.3 283.6 L 734.3 278.2 Z" fill="#8e44ad" opacity="1.0"/>
+<text x="830.0" y="500.0" font-size="12.5" fill="#8e44ad" text-anchor="start" font-weight="normal" font-style="">Rz(θ) 转回世界系</text>
+<circle cx="1040.0" cy="390.0" r="5.5" fill="#27ae60" stroke="#333" stroke-width="1.5" opacity="1.0"/>
+<line x1="1029.0" y1="390.0" x2="1051.0" y2="390.0" stroke="#27ae60" stroke-width="1.5" opacity="1.0"/>
+<line x1="1040.0" y1="379.0" x2="1040.0" y2="401.0" stroke="#27ae60" stroke-width="1.5" opacity="1.0"/>
+<text x="1054.0" y="372.0" font-size="13.5" fill="#27ae60" text-anchor="start" font-weight="bold" font-style="">= P ✓</text>
+<rect x="30.0" y="660.0" width="1060.0" height="58.0" rx="8" fill="#f0f7f0" stroke="#bcd8bc" opacity="1.0"/>
+<text x="46.0" y="686.0" font-size="13" fill="#333" text-anchor="start" font-weight="normal" font-style="">关键：d = (offset_x, offset_z) 在雷达系中是常量，不随转盘旋转；</text>
+<text x="46.0" y="706.0" font-size="13" fill="#333" text-anchor="start" font-weight="normal" font-style="">p 与 d 在雷达系内相加（一步到位），旋转只发生在最后一步。</text>
+</svg>
