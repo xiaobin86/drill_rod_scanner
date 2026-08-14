@@ -122,11 +122,30 @@ python scripts/servo_sweep_scan.py \
 ```bash
 conda activate ros_humble     # 需在 ros_humble 环境（含 ROS2 + 项目依赖）
 python3 scripts/servo_sweep_scan.py \
-  --continuous --total-time 60 \
-  --start 500 --end 2500 --step 50 \
-  --offset-x 0.055 --max-range 6 \
+  --continuous --total-time 10 \
+  --start 500 --end 2500 --step 1 \
+  --offset-x -0.055 --offset-z -0.025 \
+  --max-range 20 \
   --publish-topic /drill_scan_cloud
 ```
+
+### 1.3.1 实测安装参数（本机标定值）
+
+> 记录自实机标定（2026-08-13），当前雷达安装的**偏心修正参数**：
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| `--offset-x` | **-0.055** | 光心沿雷达 x 方向偏心（负 = 后方） |
+| `--offset-z` | **-0.025** | 光心沿雷达 z 方向偏心（负 = 左侧） |
+
+**含义**：光心相对转盘轴心在两个方向都有偏移（x 方向 5.5cm、z 方向 2.5cm），
+用这两个参数在坐标变换前把光心平移到转盘轴心。安装改变后需重新标定。
+
+![光心双偏心示意](figures/eccentric_dual_offset.png)
+
+> 图：俯视图（x-z 平面）。O 为转盘轴心，C 为光心（相对轴心偏移
+> -5.5cm/-2.5cm），转盘旋转时光心沿蓝色虚线圆弧绕轴心运动。
+
 扫描抽帧融合完成后自动发布点云，另开终端查看：
 ```bash
 conda activate ros_humble
