@@ -398,17 +398,31 @@ def main() -> None:
             rec_ts = list(rec["ts"])
             rec_frames = list(rec["frames"])
 
-            # 按位置步长抽帧：每位置对应时间点，取时间戳最近帧
-            for pos in positions:
-                # 时间点按实际运动范围（start→end）比例：
-                # 命令 P{end}T{total_ms} 是 total_s 秒内从 start 转到 end，
-                # 所以 pos 对应时刻 = (pos-start)/(end-start) × total_s
-                span = (args.end - args.start) if args.end > args.start else 1
-                target_t = (pos - args.start) / span * total_s
-                idx = pick_frame_index(rec_ts, target_t)
+            # 抽帧间隔 = max(位置步长间隔, 雷达帧间隔)
+            # 位置步长间隔：step 对应的运动时间 = step/(end-start) × total_s
+            # 雷达帧间隔：记录时间戳的平均间隔
+            # 当位置步长比雷达帧更密时，物理上无法获得更多独立帧，
+            # 自动退化为按雷达帧间隔抽帧（每帧独立不重复）
+            span = (args.end - args.start) if args.end > args.start else 1
+            pos_interval = args.step / span * total_s
+            frame_intervals = np.diff(rec_ts)
+            frame_interval = float(np.mean(frame_intervals)) if len(frame_intervals) else total_s
+            sample_interval = max(pos_interval, frame_interval)
+
+            if pos_interval < frame_interval:
+                print(f"[warn] 位置步长间隔 {pos_interval:.3f}s < 雷达帧间隔 {frame_interval:.3f}s，"
+                      f"抽帧间隔自动取 {sample_interval:.3f}s（每帧独立）")
+
+            # 按抽帧间隔生成时间点序列，取时间戳最近帧
+            t = 0.0
+            while t <= total_s:
+                idx = pick_frame_index(rec_ts, t)
                 scan = rec_frames[idx]
-                angle = servo_pos_to_angle(pos)
-                process_frame(scan, angle, f"pos={pos} (t={rec_ts[idx]:.1f}s)")
+                # 角度按时间比例映射（匀速转动下 = 位置映射）
+                frac = t / total_s if total_s > 0 else 0.0
+                angle = frac * SERVO_ANGLE_RANGE
+                process_frame(scan, angle, f"t={rec_ts[idx]:.1f}s")
+                t += sample_interval
         else:
             for pos in positions:
                 cmd = f"#{args.servo_id:03d}P{pos:04d}T{args.move_time}!"
