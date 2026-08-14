@@ -62,7 +62,7 @@ python scripts/servo_sweep_scan.py
 | `--offset-x` | 0.0 | 光心偏心 x 校正（米） |
 | `--offset-z` | 0.0 | 光心偏心 z 校正（米） |
 | `--max-range` | 50.0 | 最大显示/拼接距离（米） |
-| `--save-dir` | "" | 扫描后保存点云目录（空=不保存） |
+| `--save-dir` | 自动时间戳 | 保存点云目录，默认 `output/scan_时间戳/`（每次独立），可用 `--save-dir` 指定 |
 | `--continuous` | - | 连续转动模式（发一条命令连续转，全程记录帧后抽帧融合） |
 | `--total-time` | 60.0 | 连续模式转盘总耗时（秒），仅 --continuous 生效 |
 | `--publish-topic` | "" | 扫描完成后自动发布点云到该 ROS2 topic（如 /drill_scan_cloud），空=不发布 |
@@ -88,14 +88,17 @@ python scripts/servo_sweep_scan.py --dry-run --start 500 --end 540 --step 20
 [dry-run] 仅验证舵机指令序列（含归位），不连接雷达/Open3D，退出
 ```
 
-**② 标准整圈扫描（500-2500 = 360°）+ 保存点云**：
+**② 步进模式扫描 + 自动发布（不连续，逐位置停稳采帧后融合）**：
 ```bash
-python scripts/servo_sweep_scan.py \
-  --start 500 --end 2500 --step 50 --interval 1.5 \
-  --offset-x 0.055 --max-range 6 \
-  --save-dir output
+conda activate ros_humble
+python3 scripts/servo_sweep_scan.py \
+  --start 500 --end 2500 --step 1 --interval 0.05 \
+  --offset-x -0.055 --offset-z -0.025 \
+  --max-range 20 \
+  --publish-topic /drill_scan_cloud
 ```
-扫描完成后 `output/` 下生成 `cloud.ply`（Open3D 点云）+ `cloud.npy`（numpy 数据）。
+逐位置发送舵机指令 → 停 `--interval` 秒采一圈 → 融合。`--step 1` + 快 interval
+适合快速全量扫描；默认保存到 `output/scan_时间戳/`（`cloud.ply` + `cloud.npy`）。
 
 **③ 带网格参考的快速扫描**：
 ```bash
@@ -109,10 +112,11 @@ python scripts/servo_sweep_scan.py \
 python scripts/servo_sweep_scan.py \
   --continuous --total-time 60 \
   --start 500 --end 2500 --step 50 \
-  --offset-x 0.055 --max-range 6 --save-dir output
+  --offset-x -0.055 --offset-z -0.025 \
+  --max-range 20
 ```
-转盘 60 秒连续转完 360°，全程记录雷达每一帧到 `output/frames.npz`，
-按每 50 位置（9°）抽一帧共 41 帧融合成 3D 点云。
+转盘 60 秒连续转完 360°，全程记录雷达每一帧到默认目录 `output/scan_时间戳/frames.npz`，
+按抽帧间隔（max(位置步长, 雷达帧间隔)）抽帧融合成 3D 点云。
 
 **连续模式帧数据说明**（`--save-dir` 目录下）：
 - `frames.npz`：转动期间记录的**全部雷达帧**（`ts` 时间戳数组 + `frames` 帧点云 object 数组）
@@ -160,9 +164,10 @@ python scripts/servo_sweep_scan.py --debug \
 ```
 每包打印：`[debug] 包 1206B, 首块方位角 144.0, 解析 187 点`。
 
-**⑥ 偏心标定**：光心偏心 5.5cm，先试 x 方向，方向不对改负号：
+**⑥ 偏心标定**：本机实测双偏心 `--offset-x -0.055 --offset-z -0.025`
+（光心偏 x 后方 5.5cm、z 左方 2.5cm），详见 §1.3.1 示意图：
 ```bash
-python scripts/servo_sweep_scan.py --offset-x 0.055 ...   # 或 -0.055
+python scripts/servo_sweep_scan.py --offset-x -0.055 --offset-z -0.025 ...
 ```
 
 ### 1.4 坐标系说明（重要）
@@ -298,9 +303,10 @@ pytest tests/ -v        # 38 项全部通过
 # 终端 1：连续模式扫描 + 自动发布（ros_humble 环境已配好 ROS2 + 项目依赖）
 conda activate ros_humble
 python3 scripts/servo_sweep_scan.py \
-  --continuous --total-time 60 \
-  --start 500 --end 2500 --step 50 \
-  --offset-x 0.055 --max-range 6 \
+  --continuous --total-time 10 \
+  --start 500 --end 2500 --step 1 \
+  --offset-x -0.055 --offset-z -0.025 \
+  --max-range 20 \
   --publish-topic /drill_scan_cloud
 
 # 终端 2：RViz 查看
@@ -309,20 +315,18 @@ rviz2
 # Fixed Frame=map → Add → PointCloud2 → /drill_scan_cloud
 ```
 
-**或：步进模式扫描 + 手动发布**（可在任意环境扫描，再在 ros_humble 发布）：
+**或：步进模式扫描 + 自动发布**（不连续，逐位置采帧）：
 
 ```bash
-# ① 扫描 + 保存点云（任意 conda 环境）
-conda activate drill_rod_scanner
-python scripts/servo_sweep_scan.py \
-  --start 500 --end 2500 --step 50 --interval 1.5 \
-  --offset-x 0.055 --max-range 6 --save-dir output
-
-# ② 在 ros_humble 环境发布
+# 终端 1：扫描 + 自动发布（默认保存到 output/scan_时间戳/）
 conda activate ros_humble
-python3 scripts/publish_pointcloud.py --file output/cloud.npy --topic /drill_scan_cloud
+python3 scripts/servo_sweep_scan.py \
+  --start 500 --end 2500 --step 1 --interval 0.05 \
+  --offset-x -0.055 --offset-z -0.025 \
+  --max-range 20 \
+  --publish-topic /drill_scan_cloud
 
-# ③ 另一终端 RViz 查看
+# 终端 2：RViz 查看
 conda activate ros_humble
 rviz2
 # Add → PointCloud2 → /drill_scan_cloud → Fixed Frame=map
