@@ -348,6 +348,11 @@ def main() -> None:
                     print(f"  [rec] 已记录 {len(rec_frames)} 帧, t={elapsed:.1f}s")
             print(f"[rec] 共记录 {len(rec_frames)} 帧, 总耗时 {total_s:.1f}s")
 
+            # 空数据防护：一帧都没采到则明确报错，避免后续 min() 崩溃
+            if not rec_frames:
+                print("[rec] 错误: 未采到任何雷达帧，请检查雷达网络/配置后重试")
+                raise RuntimeError("连续模式未采到任何雷达帧")
+
             # 写文件再读回
             rec_path = Path(args.save_dir) if args.save_dir else Path("output")
             rec_path.mkdir(parents=True, exist_ok=True)
