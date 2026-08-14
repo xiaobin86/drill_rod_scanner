@@ -15,7 +15,7 @@ Open3D 黑色背景绿色点实时显示。
 用法:
   python scripts/servo_sweep_scan.py                          # 默认 500->1000, 步进10
   python scripts/servo_sweep_scan.py --port /dev/ttyUSB0 --start 100 --end 300 --step 20
-  python scripts/servo_sweep_scan.py --axis z --angle-start 0 --angle-end 180
+  python scripts/servo_sweep_scan.py --continuous --total-time 60   # 连续转动模式
   python scripts/servo_sweep_scan.py --dry-run                # 不连串口, 只打印指令
 """
 
@@ -154,28 +154,31 @@ def create_world_axes(length: float = 1.0) -> "o3d.geometry.LineSet":
     return line_set
 
 
-def servo_pos_to_angle(
-    pos: int, start: int, end: int, angle_start: float, angle_end: float
-) -> float:
-    """舵机位置 P 值线性映射为旋转角度（度）。"""
-    if end <= start:
-        return angle_start
-    frac = (pos - start) / (end - start)
-    return angle_start + frac * (angle_end - angle_start)
+# 舵机量程：位置 500-2500 固定映射 0-360 度
+SERVO_POS_MIN = 500
+SERVO_POS_MAX = 2500
+SERVO_ANGLE_RANGE = 360.0
 
 
-def theta_at_time(
-    elapsed_s: float, total_s: float, angle_start: float, angle_end: float
-) -> float:
+def servo_pos_to_angle(pos: int) -> float:
+    """舵机位置 P 值映射为旋转角度（度）。
+
+    舵机量程固定：P=500 → 0°，P=2500 → 360°，线性映射。
+    """
+    frac = (pos - SERVO_POS_MIN) / (SERVO_POS_MAX - SERVO_POS_MIN)
+    return SERVO_ANGLE_RANGE * frac
+
+
+def theta_at_time(elapsed_s: float, total_s: float) -> float:
     """连续转动模式：按已过时间线性推算当前转盘角度（度）。
 
-    转盘从 angle_start 连续转到 angle_end，耗时 total_s；
-    elapsed_s 时刻的角度按线性插值，超时后钳位在 angle_end。
+    转盘从 0° 连续转到 360°（舵机 500→2500），耗时 total_s；
+    elapsed_s 时刻的角度按线性插值，超时后钳位在 360°。
     """
     if total_s <= 0.0:
-        return angle_start
+        return 0.0
     frac = min(max(elapsed_s / total_s, 0.0), 1.0)
-    return angle_start + frac * (angle_end - angle_start)
+    return SERVO_ANGLE_RANGE * frac
 
 
 def pick_frame_index(timestamps: list[float], target_t: float) -> int:
@@ -207,10 +210,6 @@ def main() -> None:
     parser.add_argument("--servo-id", type=int, default=0, help="舵机 ID")
     parser.add_argument("--axis", default="z", choices=["x", "y", "z"],
                         help="绕世界系哪个轴旋转拼接（默认 z = 转盘竖直轴）")
-    parser.add_argument("--angle-start", type=float, default=0.0,
-                        help="start 位置对应的旋转角度（度）")
-    parser.add_argument("--angle-end", type=float, default=180.0,
-                        help="end 位置对应的旋转角度（度）")
     parser.add_argument("--lidar-port", type=int, default=2368, help="雷达数据端口")
     parser.add_argument("--offset-x", type=float, default=0.0,
                         help="光心相对转盘轴心的 x 偏移（米，旋转前校正）")
@@ -307,6 +306,7 @@ def main() -> None:
         # 首帧真实数据写入后才 add_geometry：此时包围盒含有效点。
         # （全 NaN 或空点云 add 会得到退化包围盒导致不渲染。）
         if pcd is None:
+            pcd = o3d.geometry.PointCloud()
             pcd.points = o3d.utility.Vector3dVector(cloud_buf)
             pcd.colors = o3d.utility.Vector3dVector(color_buf)
             vis.add_geometry(pcd)
@@ -367,12 +367,12 @@ def main() -> None:
 
             # 按位置步长抽帧：每位置对应时间点，取时间戳最近帧
             for pos in positions:
-                frac = (pos - args.start) / (args.end - args.start) if args.end > args.start else 0.0
+                # 时间点按舵机全量程映射：pos 在 500-2500 中对应全程的比例
+                frac = (pos - SERVO_POS_MIN) / (SERVO_POS_MAX - SERVO_POS_MIN)
                 target_t = frac * total_s
                 idx = pick_frame_index(rec_ts, target_t)
                 scan = rec_frames[idx]
-                angle = servo_pos_to_angle(pos, args.start, args.end,
-                                           args.angle_start, args.angle_end)
+                angle = servo_pos_to_angle(pos)
                 process_frame(scan, angle, f"pos={pos} (t={rec_ts[idx]:.1f}s)")
         else:
             for pos in positions:
@@ -388,8 +388,7 @@ def main() -> None:
                     print(f"  [skip] 位置 {pos}: 雷达无数据")
                     continue
 
-                angle = servo_pos_to_angle(pos, args.start, args.end,
-                                           args.angle_start, args.angle_end)
+                angle = servo_pos_to_angle(pos)
                 process_frame(scan, angle, f"pos={pos}")
 
         print(f"\n扫描完成: 累计 {total_points} 点")
