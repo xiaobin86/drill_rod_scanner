@@ -160,6 +160,31 @@ SERVO_POS_MIN = 500
 SERVO_POS_MAX = 2500
 SERVO_ANGLE_RANGE = 360.0
 
+# 按高度着色：低→蓝，高→红（蓝-青-绿-黄-红 五段渐变，纯 numpy 实现）
+HEIGHT_CMAP = np.array([
+    [0.0, 0.0, 1.0],   # 蓝
+    [0.0, 1.0, 1.0],   # 青
+    [0.0, 1.0, 0.0],   # 绿
+    [1.0, 1.0, 0.0],   # 黄
+    [1.0, 0.0, 0.0],   # 红
+])
+
+
+def color_by_height(points: np.ndarray, z_min: float, z_max: float) -> np.ndarray:
+    """按点云 z（高度）值着色：z_min→蓝，z_max→红，返回 (n,3) RGB。"""
+    if points.shape[0] == 0:
+        return np.empty((0, 3))
+    span = z_max - z_min
+    if span <= 0.0:
+        norm = np.zeros(points.shape[0])
+    else:
+        norm = np.clip((points[:, 2] - z_min) / span, 0.0, 1.0)
+    # 五段线性插值
+    scaled = norm * (len(HEIGHT_CMAP) - 1)
+    idx = np.clip(scaled.astype(int), 0, len(HEIGHT_CMAP) - 2)
+    frac = scaled - idx
+    return HEIGHT_CMAP[idx] * (1 - frac[:, None]) + HEIGHT_CMAP[idx + 1] * frac[:, None]
+
 
 def servo_pos_to_angle(pos: int) -> float:
     """舵机位置 P 值映射为旋转角度（度）。
@@ -249,6 +274,7 @@ def main() -> None:
     vis = o3d.visualization.Visualizer()
     vis.create_window(window_name="Servo Sweep Scan", width=900, height=700)
     vis.get_render_option().background_color = np.array([0.0, 0.0, 0.0])  # 黑色背景
+    vis.get_render_option().point_size = 1.0  # 点渲染 1 像素
 
     # 世界系 z=0 水平面网格（静态背景，画一次即可）
     grid = None
@@ -298,6 +324,12 @@ def main() -> None:
         total_points += n
         print(f"  [scan] {label} angle={angle:.1f}° 帧 {n} 点, 累计 {total_points} 点")
 
+        # 按高度着色：用当前有效点云的 z 范围给全部已有点重算颜色
+        valid = cloud_buf[:total_points]
+        color_buf[:total_points] = color_by_height(
+            valid, valid[:, 2].min(), valid[:, 2].max()
+        )
+
         # 首帧真实数据写入后才 add_geometry：此时包围盒含有效点。
         # （全 NaN 或空点云 add 会得到退化包围盒导致不渲染。）
         if pcd is None:
@@ -312,6 +344,7 @@ def main() -> None:
         else:
             # 点数不变，update_geometry 走快速路径
             pcd.points = o3d.utility.Vector3dVector(cloud_buf)
+            pcd.colors = o3d.utility.Vector3dVector(color_buf)
             vis.update_geometry(pcd)
         vis.update_renderer()
         vis.poll_events()
