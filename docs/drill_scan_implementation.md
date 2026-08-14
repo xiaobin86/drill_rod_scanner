@@ -160,7 +160,8 @@ python3 scripts/publish_pointcloud.py --file output/cloud.npy --topic /drill_sca
 | `--move-time` | 2000 | 舵机移动耗时 ms |
 | `--home-wait` | 3.0 | 归位后等待到位秒数 |
 | `--axis` | z | 旋转轴（世界 z = 转盘轴） |
-| `--angle-start/--angle-end` | 0/180 | 位置映射的旋转角度范围 |
+| `--continuous` | - | 连续转动模式（记录全部帧后抽帧融合） |
+| `--total-time` | 60.0 | 连续模式转盘总耗时（秒） |
 | `--offset-x/--offset-z` | 0 | 光心偏心校正（米） |
 | `--max-range` | 50 | 最大显示/拼接距离 |
 | `--save-dir` | "" | 保存点云目录（空=不保存） |
@@ -168,7 +169,9 @@ python3 scripts/publish_pointcloud.py --file output/cloud.npy --topic /drill_sca
 | `--grid-step` | 1.0 | 网格线间距 |
 | `--dry-run` | - | 只打印舵机指令不连硬件 |
 
-## 9. 测试覆盖（38 项全部通过）
+> 角度说明：舵机位置 500-2500 固定映射 0-360°，角度由位置自动计算，无需手动指定。
+
+## 9. 测试覆盖（39 项全部通过）
 
 | 测试文件 | 覆盖内容 |
 |----------|---------|

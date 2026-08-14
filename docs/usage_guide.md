@@ -48,17 +48,19 @@ python scripts/servo_sweep_scan.py
 | `--home-wait` | 3.0 | 归位后等待到位秒数 |
 | `--servo-id` | 0 | 舵机 ID |
 | `--axis` | z | 拼接旋转轴（z = 世界转盘轴） |
-| `--angle-start` | 0.0 | start 位置对应旋转角度（度） |
-| `--angle-end` | 180.0 | end 位置对应旋转角度（度） |
 | `--lidar-port` | 2368 | 雷达 UDP 数据端口 |
 | `--offset-x` | 0.0 | 光心偏心 x 校正（米） |
 | `--offset-z` | 0.0 | 光心偏心 z 校正（米） |
 | `--max-range` | 50.0 | 最大显示/拼接距离（米） |
 | `--save-dir` | "" | 扫描后保存点云目录（空=不保存） |
+| `--continuous` | - | 连续转动模式（发一条命令连续转，全程记录帧后抽帧融合） |
+| `--total-time` | 60.0 | 连续模式转盘总耗时（秒），仅 --continuous 生效 |
 | `--grid` | -1 | 网格半宽（<0 自动= max-range，0 关闭） |
 | `--grid-step` | 1.0 | 网格线间距（米） |
 | `--dry-run` | - | 只打印舵机指令，不连硬件 |
 | `--debug` | - | 打印每个 UDP 包诊断 |
+
+> 角度说明：舵机位置 500-2500 固定映射 0-360°，角度由位置自动计算，无需手动指定。
 
 ### 1.3 命令案例
 
@@ -77,7 +79,6 @@ python scripts/servo_sweep_scan.py --dry-run --start 500 --end 540 --step 20
 ```bash
 python scripts/servo_sweep_scan.py \
   --start 500 --end 2500 --step 50 --interval 1.5 \
-  --angle-start 0 --angle-end 360 \
   --offset-x 0.055 --max-range 6 \
   --save-dir output
 ```
@@ -87,9 +88,18 @@ python scripts/servo_sweep_scan.py \
 ```bash
 python scripts/servo_sweep_scan.py \
   --start 500 --end 2500 --step 100 --interval 1.0 \
-  --angle-start 0 --angle-end 360 \
   --max-range 5 --grid 6 --grid-step 1
 ```
+
+**④ 连续转动模式（转盘一条命令连续转完，全程记录帧后抽帧融合）**：
+```bash
+python scripts/servo_sweep_scan.py \
+  --continuous --total-time 60 \
+  --start 500 --end 2500 --step 50 \
+  --offset-x 0.055 --max-range 6 --save-dir output
+```
+转盘 60 秒连续转完 360°，全程记录雷达每一帧到 `output/frames.npz`，
+按每 50 位置（9°）抽一帧共 41 帧融合成 3D 点云。
 
 **④ 调试雷达数据**：
 ```bash
@@ -237,7 +247,6 @@ pytest tests/ -v        # 38 项全部通过
 conda activate drill_rod_scanner
 python scripts/servo_sweep_scan.py \
   --start 500 --end 2500 --step 50 --interval 1.5 \
-  --angle-start 0 --angle-end 360 \
   --offset-x 0.055 --max-range 6 --save-dir output
 
 # ② 在 ROS2 环境（Docker）发布
