@@ -263,7 +263,7 @@ def main() -> None:
     # 预分配固定大小缓冲：点数永不变，避免每帧 remove/add 重建 GPU 缓冲导致的卡顿。
     # 未用部分以 NaN 填充，Open3D 渲染时跳过且不参与包围盒。
     positions = list(range(args.start, args.end + 1, args.step))
-    points_per_frame = 2500  # 每圈点云上限（含余量）
+    points_per_frame = 4000  # 每圈点云上限（含余量，覆盖 10Hz 的 0.1° 分辨率 ~3600 点）
     max_points = len(positions) * points_per_frame
     cloud_buf = np.full((max_points, 3), np.nan, dtype=np.float64)
     color_buf = np.tile([0.0, 1.0, 0.0], (max_points, 1))  # 绿色点
