@@ -367,9 +367,11 @@ def main() -> None:
 
             # 按位置步长抽帧：每位置对应时间点，取时间戳最近帧
             for pos in positions:
-                # 时间点按舵机全量程映射：pos 在 500-2500 中对应全程的比例
-                frac = (pos - SERVO_POS_MIN) / (SERVO_POS_MAX - SERVO_POS_MIN)
-                target_t = frac * total_s
+                # 时间点按实际运动范围（start→end）比例：
+                # 命令 P{end}T{total_ms} 是 total_s 秒内从 start 转到 end，
+                # 所以 pos 对应时刻 = (pos-start)/(end-start) × total_s
+                span = (args.end - args.start) if args.end > args.start else 1
+                target_t = (pos - args.start) / span * total_s
                 idx = pick_frame_index(rec_ts, target_t)
                 scan = rec_frames[idx]
                 angle = servo_pos_to_angle(pos)
