@@ -245,6 +245,11 @@ def main() -> None:
     parser.add_argument("--debug", action="store_true", help="打印每包诊断信息")
     args = parser.parse_args()
 
+    # 未指定 --save-dir 时，默认用带时间戳目录（每次扫描独立，不覆盖）
+    if not args.save_dir:
+        args.save_dir = time.strftime("output/scan_%Y%m%d_%H%M%S")
+        print(f"[dir] 默认保存目录: {args.save_dir}（可用 --save-dir 指定）")
+
     # 1. 舵机串口
     ser = None
     if not args.dry_run:
