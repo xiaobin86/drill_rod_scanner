@@ -164,6 +164,20 @@ def servo_pos_to_angle(
     return angle_start + frac * (angle_end - angle_start)
 
 
+def theta_at_time(
+    elapsed_s: float, total_s: float, angle_start: float, angle_end: float
+) -> float:
+    """连续转动模式：按已过时间线性推算当前转盘角度（度）。
+
+    转盘从 angle_start 连续转到 angle_end，耗时 total_s；
+    elapsed_s 时刻的角度按线性插值，超时后钳位在 angle_end。
+    """
+    if total_s <= 0.0:
+        return angle_start
+    frac = min(max(elapsed_s / total_s, 0.0), 1.0)
+    return angle_start + frac * (angle_end - angle_start)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -174,6 +188,8 @@ def main() -> None:
     parser.add_argument("--end", type=int, default=1000, help="舵机结束位置 P（含）")
     parser.add_argument("--step", type=int, default=10, help="每次位置增量")
     parser.add_argument("--interval", type=float, default=2.0, help="每个位置停留秒数")
+    parser.add_argument("--continuous", action="store_true",
+                        help="连续转动模式：发一条 start→end 命令连续转，每 interval 采帧按时间算角度")
     parser.add_argument("--move-time", type=int, default=2000, help="舵机移动耗时 T（ms）")
     parser.add_argument("--home-wait", type=float, default=3.0,
                         help="归位后等待到位秒数（默认 3，含移动时间余量）")
@@ -249,67 +265,99 @@ def main() -> None:
 
     pcd: o3d.geometry.PointCloud | None = None
     total_points = 0
+
+    def process_frame(scan, angle: float, label: str) -> None:
+        """单帧雷达点：坐标变换 → 写入缓冲 → Open3D 更新。"""
+        nonlocal total_points
+        frame = scan_to_xy(scan)
+        dist = np.linalg.norm(frame[:, :2], axis=1)
+        frame = frame[dist <= args.max_range]
+        if frame.shape[0] == 0:
+            print(f"  [skip] {label}: 滤波后无点")
+            return
+
+        # ① 横装变换（出厂系 → 横装系，数学上恒等）
+        frame = mount_transform(frame)
+        # ② 光心偏心校正：光心绕转盘轴做圆弧运动，
+        #    世界点 = Rz(θ)·(雷达系测量 + 光心偏移d)，须先加 d 再旋转
+        frame[:, 0] += args.offset_x
+        frame[:, 2] += args.offset_z
+        # ③ 雷达系 → 世界系（z 竖直 = 转盘轴）
+        frame = to_world(frame)
+        # ④ 绕世界 z 轴（转盘轴）旋转，聚合 3D 扫描面
+        rotated = rotate_points(frame, args.axis, angle)
+
+        # 增量写入固定缓冲，避免 vstack 全量复制
+        n = rotated.shape[0]
+        cloud_buf[total_points:total_points + n] = rotated
+        total_points += n
+        print(f"  [scan] {label} angle={angle:.1f}° 帧 {n} 点, 累计 {total_points} 点")
+
+        # 首帧真实数据写入后才 add_geometry：此时包围盒含有效点。
+        # （全 NaN 或空点云 add 会得到退化包围盒导致不渲染。）
+        if pcd is None:
+            pcd.points = o3d.utility.Vector3dVector(cloud_buf)
+            pcd.colors = o3d.utility.Vector3dVector(color_buf)
+            vis.add_geometry(pcd)
+            ctr = vis.get_view_control()
+            ctr.set_front([0.0, 0.0, 1.0])
+            ctr.set_up([0.0, 1.0, 0.0])
+            ctr.set_lookat([0.0, 0.0, 0.0])
+        else:
+            # 点数不变，update_geometry 走快速路径
+            pcd.points = o3d.utility.Vector3dVector(cloud_buf)
+            vis.update_geometry(pcd)
+        vis.update_renderer()
+        vis.poll_events()
+
     try:
-        for pos in positions:
-            cmd = f"#{args.servo_id:03d}P{pos:04d}T{args.move_time}!"
-            print(f"[servo] {cmd}")
+        if args.continuous:
+            # 连续转动模式：一条命令从 start 转到 end，耗时 = 步进数 × interval
+            n_steps = max((args.end - args.start) // args.step, 1)
+            total_s = n_steps * args.interval
+            total_ms = int(total_s * 1000)
+            cmd = f"#{args.servo_id:03d}P{args.end:04d}T{total_ms}!"
+            print(f"[cont] 连续转动 {args.start}→{args.end}, 耗时 {total_s:.1f}s: {cmd}")
             if ser:
                 ser.write(cmd.encode())
                 ser.flush()
-            time.sleep(args.interval)
+            t0 = time.monotonic()
+            frame_idx = 0
+            while True:
+                elapsed = time.monotonic() - t0
+                if elapsed >= total_s:
+                    break
+                scan = lidar.receive_scan()
+                if scan is None or not scan:
+                    print(f"  [skip] t={elapsed:.1f}s: 雷达无数据")
+                    continue
+                angle = theta_at_time(elapsed, total_s,
+                                      args.angle_start, args.angle_end)
+                process_frame(scan, angle, f"t={elapsed:.1f}s")
+                frame_idx += 1
+                # 等到下一个 interval 时间点再采下一帧
+                next_t = t0 + frame_idx * args.interval
+                while time.monotonic() < next_t and time.monotonic() - t0 < total_s:
+                    time.sleep(0.01)
+        else:
+            for pos in positions:
+                cmd = f"#{args.servo_id:03d}P{pos:04d}T{args.move_time}!"
+                print(f"[servo] {cmd}")
+                if ser:
+                    ser.write(cmd.encode())
+                    ser.flush()
+                time.sleep(args.interval)
 
-            scan = lidar.receive_scan()
-            if scan is None or not scan:
-                print(f"  [skip] 位置 {pos}: 雷达无数据")
-                continue
+                scan = lidar.receive_scan()
+                if scan is None or not scan:
+                    print(f"  [skip] 位置 {pos}: 雷达无数据")
+                    continue
 
-            # 三步坐标处理：
-            # ① 极坐标 → 雷达系 xyz（x 前/y 上/z 右，扫描弧竖直）
-            frame = scan_to_xy(scan)
-            dist = np.linalg.norm(frame[:, :2], axis=1)
-            frame = frame[dist <= args.max_range]
-            if frame.shape[0] == 0:
-                print(f"  [skip] 位置 {pos}: 滤波后无点")
-                continue
+                angle = servo_pos_to_angle(pos, args.start, args.end,
+                                           args.angle_start, args.angle_end)
+                process_frame(scan, angle, f"pos={pos}")
 
-            angle = servo_pos_to_angle(pos, args.start, args.end,
-                                       args.angle_start, args.angle_end)
-            # ② 横装变换（出厂系 → 横装系，数学上恒等）
-            frame = mount_transform(frame)
-            # ③ 光心偏心校正：光心绕转盘轴做圆弧运动，
-            #    世界点 = Rz(θ)·(雷达系测量 + 光心偏移d)，须先加 d 再旋转
-            frame[:, 0] += args.offset_x
-            frame[:, 2] += args.offset_z
-            # ④ 雷达系 → 世界系（z 竖直 = 转盘轴）
-            frame = to_world(frame)
-            # ⑤ 绕世界 z 轴（转盘轴）旋转，聚合 3D 扫描面
-            rotated = rotate_points(frame, args.axis, angle)
-
-            # 增量写入固定缓冲，避免 vstack 全量复制
-            n = rotated.shape[0]
-            cloud_buf[total_points:total_points + n] = rotated
-            total_points += n
-            print(f"  [scan] pos={pos} angle={angle:.1f}° 帧 {n} 点, 累计 {total_points} 点")
-
-            # 首帧真实数据写入后才 add_geometry：此时包围盒含有效点。
-            # （全 NaN 或空点云 add 会得到退化包围盒导致不渲染。）
-            if pcd is None:
-                pcd = o3d.geometry.PointCloud()
-                pcd.points = o3d.utility.Vector3dVector(cloud_buf)
-                pcd.colors = o3d.utility.Vector3dVector(color_buf)
-                vis.add_geometry(pcd)
-                ctr = vis.get_view_control()
-                ctr.set_front([0.0, 0.0, 1.0])
-                ctr.set_up([0.0, 1.0, 0.0])
-                ctr.set_lookat([0.0, 0.0, 0.0])
-            else:
-                # 点数不变，update_geometry 走快速路径
-                pcd.points = o3d.utility.Vector3dVector(cloud_buf)
-                vis.update_geometry(pcd)
-            vis.update_renderer()
-            vis.poll_events()
-
-        print(f"\n扫描完成: {len(positions)} 个位置, 累计 {total_points} 点")
+        print(f"\n扫描完成: 累计 {total_points} 点")
 
         # 保存点云：取缓冲中有效部分（NaN 填充之外）
         if args.save_dir and total_points > 0:

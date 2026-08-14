@@ -9,8 +9,24 @@ from scripts.servo_sweep_scan import (
     rotate_points,
     save_cloud,
     servo_pos_to_angle,
+    theta_at_time,
     to_world,
 )
+
+
+def test_theta_at_time_linear():
+    # 连续模式时间推算：线性插值 + 钳位
+    assert theta_at_time(0, 60, 0, 360) == 0.0
+    assert theta_at_time(30, 60, 0, 360) == 180.0
+    assert theta_at_time(60, 60, 0, 360) == 360.0
+    assert theta_at_time(90, 60, 0, 360) == 360.0  # 超时钳位
+    assert theta_at_time(15, 60, 0, 180) == 45.0
+    assert theta_at_time(-5, 60, 0, 360) == 0.0   # 负时间钳位
+
+
+def test_theta_at_time_zero_total():
+    # 总耗时为 0 时返回 angle_start，不除零
+    assert theta_at_time(10, 0, 30, 60) == 30.0
 
 
 def test_save_cloud(tmp_path):
