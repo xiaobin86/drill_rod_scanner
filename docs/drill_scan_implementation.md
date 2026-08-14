@@ -157,6 +157,30 @@ rotated = rotate_points(frame, axis='z', angle)
 
 共抽 41 帧（2000/50 + 1），每帧用位置映射角度融合成 3D 点云。
 
+### 5.2 自动发布（--publish-topic）
+
+扫描抽帧融合完成后，若指定 `--publish-topic`，自动发布点云到 ROS2 topic：
+
+- 复用 `publish_pointcloud.publish()`（内部是 `while rclpy.ok()` 循环）
+- 在**后台线程**运行（daemon），不阻塞 Open3D 窗口主循环
+- `try/except` 包裹：本机无 ROS2 时打印失败提示，不影响扫描
+- 参数：`--publish-topic`（topic 名）、`--publish-frame`（frame_id，默认 map）、
+  `--publish-rate`（频率 Hz，默认 2）
+- 关键：发布前每帧设置**当前时间戳**（`node.get_clock().now().to_msg()`），
+  RViz 依赖 stamp 查询 TF，stamp=0 会导致不显示
+
+**空帧防护**：连续模式若全程未采到任何雷达帧，明确报错
+`未采到任何雷达帧，请检查雷达网络/配置` 并中止（避免 `pick_frame_index` 对空列表崩溃）。
+
+**运行环境**：`ros_humble` conda 环境（RoboStack 安装 ROS2 humble + rviz2）。
+激活时自动配置（`etc/conda/activate.d/`）：`RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`、
+`ROS_DOMAIN_ID=0`。使用：
+```bash
+conda activate ros_humble
+python3 scripts/servo_sweep_scan.py --continuous --publish-topic /drill_scan_cloud ...
+rviz2   # 另一终端：Fixed Frame=map → Add → PointCloud2 → /drill_scan_cloud
+```
+
 ## 6. 可视化与性能优化
 
 ### 6.1 Open3D 渲染（三个关键坑）
