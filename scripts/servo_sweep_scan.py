@@ -198,7 +198,9 @@ def main() -> None:
     parser.add_argument("--step", type=int, default=10, help="每次位置增量")
     parser.add_argument("--interval", type=float, default=2.0, help="每个位置停留秒数")
     parser.add_argument("--continuous", action="store_true",
-                        help="连续转动模式：发一条 start→end 命令连续转，每 interval 采帧按时间算角度")
+                        help="连续转动模式：发一条 start→end 命令连续转，全程记录帧后按步长抽帧融合")
+    parser.add_argument("--total-time", type=float, default=60.0,
+                        help="连续模式转盘总耗时（秒），仅 --continuous 时生效")
     parser.add_argument("--move-time", type=int, default=2000, help="舵机移动耗时 T（ms）")
     parser.add_argument("--home-wait", type=float, default=3.0,
                         help="归位后等待到位秒数（默认 3，含移动时间余量）")
@@ -322,11 +324,10 @@ def main() -> None:
     try:
         if args.continuous:
             # 连续转动模式（记录+抽帧）：
-            # ① 一条命令从 start 连续转到 end，总时长 = 步进数 × interval
+            # ① 一条命令从 start 连续转到 end，总时长 = --total-time
             # ② 过程中记录雷达每一帧（带接收时间戳）
             # ③ 转完后写文件，读回后按位置步长抽帧（取时间最近帧）→ 位置映射角度 → 融合
-            n_steps = max((args.end - args.start) // args.step, 1)
-            total_s = n_steps * args.interval
+            total_s = max(args.total_time, 0.1)
             total_ms = int(total_s * 1000)
             cmd = f"#{args.servo_id:03d}P{args.end:04d}T{total_ms}!"
             print(f"[cont] 连续转动 {args.start}→{args.end}, 耗时 {total_s:.1f}s: {cmd}")
