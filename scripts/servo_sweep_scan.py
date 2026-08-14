@@ -169,18 +169,6 @@ def servo_pos_to_angle(pos: int) -> float:
     return SERVO_ANGLE_RANGE * frac
 
 
-def theta_at_time(elapsed_s: float, total_s: float) -> float:
-    """连续转动模式：按已过时间线性推算当前转盘角度（度）。
-
-    转盘从 0° 连续转到 360°（舵机 500→2500），耗时 total_s；
-    elapsed_s 时刻的角度按线性插值，超时后钳位在 360°。
-    """
-    if total_s <= 0.0:
-        return 0.0
-    frac = min(max(elapsed_s / total_s, 0.0), 1.0)
-    return SERVO_ANGLE_RANGE * frac
-
-
 def pick_frame_index(timestamps: list[float], target_t: float) -> int:
     """从帧时间戳列表中找到最接近 target_t 的帧索引。
 
