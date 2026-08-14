@@ -6,15 +6,25 @@
 
 ## 0. 环境准备
 
+**推荐环境：`ros_humble`**（ROS2 humble + 项目依赖 + RViz，一条龙扫描/发布/查看）：
+
 ```bash
-# 创建并激活环境（一次性）
+# 创建（RoboStack 提供 ROS2，需已配置 robostack-staging + conda-forge 频道）
+conda create -n ros_humble -c robostack-staging -c conda-forge ros-humble-desktop python=3.10 -y
+conda activate ros_humble
+pip install pyserial numpy open3d pyyaml
+
+# 激活时自动配置 ROS2（RMW_IMPLEMENTATION=rmw_cyclonedds_cpp 等已写入激活钩子）
+conda activate ros_humble
+```
+
+**备用环境：`drill_rod_scanner`**（仅扫描，无 ROS2）：
+
+```bash
 conda create -n drill_rod_scanner python=3.10 -y
 conda activate drill_rod_scanner
 pip install pyserial numpy open3d pyyaml pytest
 pip install -e .          # 安装项目包（可编辑模式）
-
-# 每次使用前激活
-conda activate drill_rod_scanner
 ```
 
 **硬件接线**：
