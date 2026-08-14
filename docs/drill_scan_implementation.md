@@ -116,6 +116,47 @@ rotated = rotate_points(frame, axis='z', angle)
 8. 窗口保持打开可交互查看
 ```
 
+## 5.1 连续转动模式（--continuous，记录+抽帧）
+
+与步进模式不同，连续模式让转盘**一条命令连续转完**，全程记录雷达所有帧，转完后按位置步长抽帧融合。
+
+```
+1. 归位到 start
+2. 发一条 #000P{end}T{total_ms}! 命令（total_ms = --total-time × 1000），转盘连续转动
+3. 转动期间持续接收雷达帧，每帧记录：
+   - rec_ts[]     帧接收时间戳（相对命令发出时刻，秒）
+   - rec_frames[] 帧原始点云（ScanPoint 列表）
+   → 直到 elapsed >= --total-time 停止
+4. 全部帧写入文件：output/frames.npz（ts + frames）
+5. 读回文件
+6. 按位置步长抽帧，对每个位置 pos：
+   frac = (pos - SERVO_POS_MIN) / (SERVO_POS_MAX - SERVO_POS_MIN)   # 500-2500 全程比例
+   target_t = frac × total_s                                        # 该位置对应时间点
+   idx = pick_frame_index(rec_ts, target_t)                         # 取时间戳最近帧
+   angle = servo_pos_to_angle(pos)                                  # 位置 → 角度
+   process_frame(scan, angle, ...)                                  # 坐标变换 + 融合
+```
+
+**关键实现点**：
+
+- **总耗时**：`--total-time` 直接指定（秒），不再由 interval 推导
+- **角度映射**：舵机量程硬编码，`SERVO_POS_MIN=500, SERVO_POS_MAX=2500` →
+  `角度 = (pos - 500) / (2500 - 500) × 360`，无需手动指定角度范围
+- **抽帧**：`pick_frame_index(timestamps, target_t)` 从记录帧中选时间戳最接近 target_t 的帧
+  （`min(range(len(ts)), key=lambda i: abs(ts[i] - target_t))`）
+- **坐标变换**：复用 `process_frame()`，与步进模式完全一致（偏心/世界系/旋转）
+
+**举例**（`--start 500 --end 2500 --step 50 --total-time 60`）：
+
+| 位置 pos | 时间点 target_t | 角度 |
+|---------|----------------|------|
+| 500 | 0s | 0° |
+| 550 | 1.5s | 9° |
+| 1500 | 30s | 180° |
+| 2500 | 60s | 360° |
+
+共抽 41 帧（2000/50 + 1），每帧用位置映射角度融合成 3D 点云。
+
 ## 6. 可视化与性能优化
 
 ### 6.1 Open3D 渲染（三个关键坑）

@@ -101,14 +101,18 @@ python scripts/servo_sweep_scan.py \
 转盘 60 秒连续转完 360°，全程记录雷达每一帧到 `output/frames.npz`，
 按每 50 位置（9°）抽一帧共 41 帧融合成 3D 点云。
 
-**④ 调试雷达数据**：
+**连续模式帧数据说明**（`--save-dir` 目录下）：
+- `frames.npz`：转动期间记录的**全部雷达帧**（`ts` 时间戳数组 + `frames` 帧点云 object 数组）
+- `cloud.ply` / `cloud.npy`：按步长抽帧融合后的最终 3D 点云
+
+**⑤ 调试雷达数据**：
 ```bash
 python scripts/servo_sweep_scan.py --debug \
   --start 500 --end 520 --step 10 --max-range 3
 ```
 每包打印：`[debug] 包 1206B, 首块方位角 144.0, 解析 187 点`。
 
-**⑤ 偏心标定**：光心偏心 5.5cm，先试 x 方向，方向不对改负号：
+**⑥ 偏心标定**：光心偏心 5.5cm，先试 x 方向，方向不对改负号：
 ```bash
 python scripts/servo_sweep_scan.py --offset-x 0.055 ...   # 或 -0.055
 ```
@@ -243,10 +247,16 @@ pytest tests/ -v        # 38 项全部通过
 **从扫描到 RViz 全流程**：
 
 ```bash
-# ① 本机扫描 + 保存点云
+# ① 本机扫描 + 保存点云（步进模式）
 conda activate drill_rod_scanner
 python scripts/servo_sweep_scan.py \
   --start 500 --end 2500 --step 50 --interval 1.5 \
+  --offset-x 0.055 --max-range 6 --save-dir output
+
+# ①' 或连续转动模式（转盘连续转完，全程记录帧后抽帧融合）
+python scripts/servo_sweep_scan.py \
+  --continuous --total-time 60 \
+  --start 500 --end 2500 --step 50 \
   --offset-x 0.055 --max-range 6 --save-dir output
 
 # ② 在 ROS2 环境（Docker）发布
