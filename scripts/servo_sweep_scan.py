@@ -28,6 +28,7 @@ from pathlib import Path
 
 import numpy as np
 import serial
+import threading
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lakibeam_viewer import LakiBeamViewer, ScanPoint, scan_to_xy  # noqa: E402
@@ -206,6 +207,12 @@ def main() -> None:
     parser.add_argument("--max-range", type=float, default=50.0, help="最大显示距离（米）")
     parser.add_argument("--save-dir", type=str, default="",
                         help="扫描完成后保存点云到该目录（PLY+PCD+npz），留空不保存")
+    parser.add_argument("--publish-topic", type=str, default="",
+                        help="扫描完成后自动发布点云到该 ROS2 topic（如 /drill_scan_cloud），留空不发布")
+    parser.add_argument("--publish-frame", type=str, default="map",
+                        help="发布点云的 frame_id（默认 map）")
+    parser.add_argument("--publish-rate", type=float, default=2.0,
+                        help="发布频率 Hz")
     parser.add_argument("--grid", type=float, default=-1.0,
                         help="世界系水平面网格半宽（米），默认按 max-range 自动设置，0 关闭")
     parser.add_argument("--grid-step", type=float, default=1.0, help="网格线间距（米）")
@@ -388,6 +395,24 @@ def main() -> None:
             print(f"[save] 点云已保存到 {args.save_dir}")
             for kind, path in saved.items():
                 print(f"  {kind}: {path}")
+
+        # 自动发布到 ROS2 topic（后台线程，不阻塞 Open3D 窗口）
+        publish_thread = None
+        if args.publish_topic and total_points > 0:
+            try:
+                from publish_pointcloud import publish
+
+                valid = cloud_buf[:total_points]
+                publish_thread = threading.Thread(
+                    target=publish,
+                    args=(valid, args.publish_topic, args.publish_frame, args.publish_rate),
+                    daemon=True,
+                )
+                publish_thread.start()
+                print(f"[pub] 正在发布 {total_points} 点到 topic {args.publish_topic}"
+                      f" (frame_id={args.publish_frame})，RViz 可直接查看")
+            except Exception as exc:  # noqa: BLE001
+                print(f"[pub] 自动发布失败（需要 ROS2 环境）: {exc}")
 
         print("窗口保持打开, 可鼠标旋转/缩放查看, Ctrl+C 或关窗退出")
         while vis.poll_events():
