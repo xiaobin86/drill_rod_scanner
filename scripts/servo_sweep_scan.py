@@ -279,7 +279,7 @@ def main() -> None:
 
     def process_frame(scan, angle: float, label: str) -> None:
         """单帧雷达点：坐标变换 → 写入缓冲 → Open3D 更新。"""
-        nonlocal total_points
+        nonlocal total_points, pcd
         frame = scan_to_xy(scan)
         dist = np.linalg.norm(frame[:, :2], axis=1)
         frame = frame[dist <= args.max_range]
