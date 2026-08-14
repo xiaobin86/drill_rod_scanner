@@ -5,6 +5,7 @@ import pytest
 
 from scripts.servo_sweep_scan import (
     mount_transform,
+    pick_frame_index,
     rotation_matrix,
     rotate_points,
     save_cloud,
@@ -12,6 +13,20 @@ from scripts.servo_sweep_scan import (
     theta_at_time,
     to_world,
 )
+
+
+def test_pick_frame_index_nearest():
+    # 时间戳列表中找到最接近目标时刻的帧索引
+    ts = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+    assert pick_frame_index(ts, 0.0) == 0
+    assert pick_frame_index(ts, 1.4) == 1
+    assert pick_frame_index(ts, 2.5) == 2   # 2.5 距 2 和 3 等距，min 取先出现的 2
+    assert pick_frame_index(ts, 4.9) == 5
+    assert pick_frame_index(ts, 100.0) == 5  # 超范围取末尾
+
+
+def test_pick_frame_index_single():
+    assert pick_frame_index([3.5], 100.0) == 0
 
 
 def test_theta_at_time_linear():

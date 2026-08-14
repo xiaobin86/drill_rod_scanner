@@ -30,7 +30,7 @@ import numpy as np
 import serial
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lakibeam_viewer import LakiBeamViewer, scan_to_xy  # noqa: E402
+from lakibeam_viewer import LakiBeamViewer, ScanPoint, scan_to_xy  # noqa: E402
 
 
 def rotation_matrix(axis: str, angle_deg: float) -> np.ndarray:
@@ -178,6 +178,15 @@ def theta_at_time(
     return angle_start + frac * (angle_end - angle_start)
 
 
+def pick_frame_index(timestamps: list[float], target_t: float) -> int:
+    """从帧时间戳列表中找到最接近 target_t 的帧索引。
+
+    转盘连续转动时每帧有接收时间戳；按位置步长抽帧时，
+    每个位置对应一个时间点，取时间戳最接近该时间点的帧。
+    """
+    return min(range(len(timestamps)), key=lambda i: abs(timestamps[i] - target_t))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -312,7 +321,10 @@ def main() -> None:
 
     try:
         if args.continuous:
-            # 连续转动模式：一条命令从 start 转到 end，耗时 = 步进数 × interval
+            # 连续转动模式（记录+抽帧）：
+            # ① 一条命令从 start 连续转到 end，总时长 = 步进数 × interval
+            # ② 过程中记录雷达每一帧（带接收时间戳）
+            # ③ 转完后写文件，读回后按位置步长抽帧（取时间最近帧）→ 位置映射角度 → 融合
             n_steps = max((args.end - args.start) // args.step, 1)
             total_s = n_steps * args.interval
             total_ms = int(total_s * 1000)
@@ -321,24 +333,46 @@ def main() -> None:
             if ser:
                 ser.write(cmd.encode())
                 ser.flush()
+
+            # 记录全部帧
             t0 = time.monotonic()
-            frame_idx = 0
+            rec_ts: list[float] = []
+            rec_frames: list[list[ScanPoint]] = []
             while True:
                 elapsed = time.monotonic() - t0
                 if elapsed >= total_s:
                     break
                 scan = lidar.receive_scan()
                 if scan is None or not scan:
-                    print(f"  [skip] t={elapsed:.1f}s: 雷达无数据")
+                    print(f"  [rec] t={elapsed:.1f}s: 雷达无数据")
                     continue
-                angle = theta_at_time(elapsed, total_s,
-                                      args.angle_start, args.angle_end)
-                process_frame(scan, angle, f"t={elapsed:.1f}s")
-                frame_idx += 1
-                # 等到下一个 interval 时间点再采下一帧
-                next_t = t0 + frame_idx * args.interval
-                while time.monotonic() < next_t and time.monotonic() - t0 < total_s:
-                    time.sleep(0.01)
+                rec_ts.append(elapsed)
+                rec_frames.append(scan)
+                if len(rec_frames) % 50 == 0:
+                    print(f"  [rec] 已记录 {len(rec_frames)} 帧, t={elapsed:.1f}s")
+            print(f"[rec] 共记录 {len(rec_frames)} 帧, 总耗时 {total_s:.1f}s")
+
+            # 写文件再读回
+            rec_path = Path(args.save_dir) if args.save_dir else Path("output")
+            rec_path.mkdir(parents=True, exist_ok=True)
+            rec_file = rec_path / "frames.npz"
+            np.savez(rec_file, ts=np.array(rec_ts),
+                     frames=np.array(rec_frames, dtype=object))
+            print(f"[rec] 帧数据已写入 {rec_file}")
+
+            rec = np.load(rec_file, allow_pickle=True)
+            rec_ts = list(rec["ts"])
+            rec_frames = list(rec["frames"])
+
+            # 按位置步长抽帧：每位置对应时间点，取时间戳最近帧
+            for pos in positions:
+                frac = (pos - args.start) / (args.end - args.start) if args.end > args.start else 0.0
+                target_t = frac * total_s
+                idx = pick_frame_index(rec_ts, target_t)
+                scan = rec_frames[idx]
+                angle = servo_pos_to_angle(pos, args.start, args.end,
+                                           args.angle_start, args.angle_end)
+                process_frame(scan, angle, f"pos={pos} (t={rec_ts[idx]:.1f}s)")
         else:
             for pos in positions:
                 cmd = f"#{args.servo_id:03d}P{pos:04d}T{args.move_time}!"
