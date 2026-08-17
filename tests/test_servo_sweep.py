@@ -46,23 +46,23 @@ def test_mount_transform_identity():
 
 
 def test_to_world_axis_mapping():
-    # 雷达系 (x前, y上, z右) -> 世界系 (z竖=转盘轴, x/y水平)
-    # 世界 x=雷达 x（前）, 世界 y=雷达 z（右）, 世界 z=雷达 y（上）
+    # 雷达系 (x下, y左, z前) -> 世界系 (z竖=转盘轴, x/y水平)
+    # 世界 x=雷达 z（前）, 世界 y=雷达 y（左）, 世界 z=-雷达 x（下→上）
     pts = np.array([
-        [1.0, 0.0, 0.0],   # 雷达 x（前）-> 世界 x
-        [0.0, 1.0, 0.0],   # 雷达 y（上）-> 世界 z
-        [0.0, 0.0, 1.0],   # 雷达 z（右）-> 世界 y
+        [1.0, 0.0, 0.0],   # 雷达 x（下）-> 世界 -z
+        [0.0, 1.0, 0.0],   # 雷达 y（左）-> 世界 y
+        [0.0, 0.0, 1.0],   # 雷达 z（前）-> 世界 x
     ])
     out = to_world(pts)
-    np.testing.assert_allclose(out[0], [1.0, 0.0, 0.0], atol=1e-9)
-    np.testing.assert_allclose(out[1], [0.0, 0.0, 1.0], atol=1e-9)
-    np.testing.assert_allclose(out[2], [0.0, 1.0, 0.0], atol=1e-9)
+    np.testing.assert_allclose(out[0], [0.0, 0.0, -1.0], atol=1e-9)
+    np.testing.assert_allclose(out[1], [0.0, 1.0, 0.0], atol=1e-9)
+    np.testing.assert_allclose(out[2], [1.0, 0.0, 0.0], atol=1e-9)
 
 
 def test_to_world_then_rotate_z():
-    # 雷达前方点 (1,0,0) -> 世界 (1,0,0), 绕世界 z（=转盘轴）转 90° -> (0,1,0)
+    # 雷达前方点 (0,0,1) -> 世界 (1,0,0), 绕世界 z（=转盘轴）转 90° -> (0,1,0)
     # 即竖直扫描弧绕转盘轴（世界 z）扫出水平扇面
-    pts = to_world(np.array([[1.0, 0.0, 0.0]]))
+    pts = to_world(np.array([[0.0, 0.0, 1.0]]))
     out = rotate_points(pts, "z", 90.0)
     np.testing.assert_allclose(out[0], [0.0, 1.0, 0.0], atol=1e-9)
 
@@ -126,15 +126,15 @@ def test_turntable_aggregation_axis_y():
 def test_eccentric_offset_arc_reconstruction():
     """光心偏心圆弧运动的完整物理循环：世界点必须在各角度被精确重建。
 
-    物理模型：雷达系 x前/y上/z右，to_world=(x,z,y)（世界z=雷达y上=转盘轴），
+    物理模型：雷达系 x下/y左/z前，to_world=(z,y,-x)（世界z=-雷达x=转盘轴），
     光心偏移 d（雷达系常量），转盘转 θ 时光心世界位置 = Rz(θ)·T·d。
     重建公式（修复后）：P = Rz(θ)·T·(p + d)——先加 d 再旋转。
     这是"各圆柱面" bug 的回归测试：若用 p - d（旧错误实现），
     重建点会随角度漂移而非固定在 P。
     """
     P = np.array([2.0, 0.0, 0.5])   # 世界系墙上的固定点
-    d = np.array([0.055, 0.0, 0.0])  # 光心偏移（雷达系 x 前方 5.5cm）
-    T = np.array([[1, 0, 0], [0, 0, 1], [0, 1, 0]])  # to_world=(x,z,y)
+    d = np.array([0.055, 0.0, 0.0])  # 光心偏移（雷达系 x 下方 5.5cm）
+    T = np.array([[0, 0, 1], [0, 1, 0], [-1, 0, 0]])  # to_world=(z,y,-x)
 
     def rotz(theta: float) -> np.ndarray:
         c, s = np.cos(np.deg2rad(theta)), np.sin(np.deg2rad(theta))

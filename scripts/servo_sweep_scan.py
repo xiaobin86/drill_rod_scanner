@@ -6,7 +6,7 @@
 Open3D 黑色背景绿色点实时显示。
 
 坐标系约定:
-  雷达系（实测安装）: x 向前, y 朝上, z 向右; 自转扫描弧在 x-y 竖直平面（0° 指前）。
+  雷达系（安装方式）: x 向下, y 向左, z 向前; 自转扫描弧在 x-y 竖直平面（0° 指 +x 下）。
   世界系: z 轴竖直（转盘旋转轴）, x/y 水平（转盘平面）。
   坐标处理: 极坐标 -> 雷达系 xyz -> 横装变换(恒等) -> 偏心校正(offset-x/z)
   -> to_world(雷达系->世界系) -> 绕世界 z 轴（转盘轴）旋转聚合 3D 扫描面。
@@ -73,12 +73,12 @@ def mount_transform(points: np.ndarray) -> np.ndarray:
 def to_world(points: np.ndarray) -> np.ndarray:
     """雷达系 → 世界系（转盘系）。
 
-    雷达系（实测安装）：x 前、y 上、z 右，扫描弧在 x-y 竖直面（0° 指前）。
+    雷达系（安装方式：x 向下、y 向左、z 向前），扫描弧在 x-y 竖直面（0° 指 +x 下）。
     世界系：z 竖直（转盘旋转轴）、x/y 水平。
-    映射：世界 x=雷达 x（前）、世界 y=雷达 z（右）、世界 z=雷达 y（上）。
+    映射：世界 x=雷达 z（前）、世界 y=雷达 y（左）、世界 z=-雷达 x（下→上）。
     点已在世界系，转盘绕世界 z 轴旋转，拼接旋转轴用 --axis z。
     """
-    return points[:, [0, 2, 1]]  # (x, y, z) -> (x_radar, z_radar, y_radar)
+    return points[:, [2, 1, 0]] * np.array([1.0, 1.0, -1.0])
 
 
 def save_cloud(points: np.ndarray, output_dir: str, cloud_format: str = "ply") -> dict[str, Path]:
