@@ -47,8 +47,7 @@ def main() -> None:
     parser.add_argument("--angles", type=Path, default=None, help="per-point angles in degrees (.npy)")
     parser.add_argument("--install-config", type=Path, required=True, help="install config YAML to read and update")
     parser.add_argument("--voxel-size", type=float, default=0.02, help="downsampling voxel size (m)")
-    parser.add_argument("--k", type=int, default=10, help="neighbors for local plane fitting")
-    parser.add_argument("--max-distance", type=float, default=0.05, help="max correspondence distance (m)")
+    parser.add_argument("--max-distance", type=float, default=0.05, help="max nearest-neighbor distance (m)")
     parser.add_argument("--fix-yaw", action="store_true", help="constrain yaw to 0")
     parser.add_argument("--dry-run", action="store_true", help="print results without writing file")
     args = parser.parse_args()
@@ -67,13 +66,12 @@ def main() -> None:
 
     cfg = InstallConfig.load(args.install_config)
     print(f"[load] {points.shape[0]} points from {args.cloud}")
-    print(f"[calibrate] voxel={args.voxel_size}m k={args.k} max_dist={args.max_distance}m fix_yaw={args.fix_yaw}")
+    print(f"[calibrate] voxel={args.voxel_size}m max_dist={args.max_distance}m fix_yaw={args.fix_yaw}")
 
     roll, pitch, yaw = calibrate_tilt(
         points,
         angles_deg,
         voxel_size=args.voxel_size,
-        k=args.k,
         max_distance=args.max_distance,
         fix_yaw=args.fix_yaw,
     )
