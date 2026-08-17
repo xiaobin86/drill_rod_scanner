@@ -1,8 +1,3 @@
-# 雷达安装方式配置
-# 换安装方式时复制本文件修改即可，无需改代码。
-# 两个自由度：
-#   mount.axis/angle_deg : 棱镜 0° 参考相位（绕雷达系该轴旋转对齐）
-#   to_world.x/y/z       : 世界系 x/y/z 轴各取自雷达系哪个轴（可带负号）
 name: side-mount
 description: 横装：雷达 x 下、y 左、z 前（默认）
 mount:
@@ -13,3 +8,9 @@ to_world:
   y: y
   z: -x
 turntable_axis: z
+level_tilt_x_deg: -1.5671860977160408
+level_tilt_y_deg: -1.8087567881983473
+level_normal:
+- 0.03156351808189998
+- -0.02733552006559887
+- 0.9991278765348492

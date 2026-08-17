@@ -5,7 +5,11 @@ import pytest
 import yaml
 
 from scripts.install_config import InstallConfig
-from scripts.level_scan import align_to_z_matrix, fit_plane_normal, level_from_cloud
+from scripts.level_scan import (
+    fit_plane_normal,
+    level_from_cloud,
+    normal_to_tilt_angles,
+)
 
 
 def test_fit_plane_normal_horizontal():
@@ -42,25 +46,8 @@ def test_fit_plane_normal_tilted():
     assert n[2] > 0.99
 
 
-def test_align_to_z_matrix():
-    # 把倾斜法向量对齐到 z，误差应为 0
-    n = np.array([0.1, -0.2, 0.975])
-    n /= np.linalg.norm(n)
-    r = align_to_z_matrix(n)
-    aligned = r @ n
-    np.testing.assert_allclose(aligned, [0, 0, 1.0], atol=1e-9)
-    # 是旋转矩阵（正交 + det=1）
-    np.testing.assert_allclose(r @ r.T, np.eye(3), atol=1e-9)
-    assert np.isclose(np.linalg.det(r), 1.0)
-
-
-def test_align_to_z_identity_for_z():
-    r = align_to_z_matrix(np.array([0.0, 0.0, 1.0]))
-    np.testing.assert_allclose(r, np.eye(3), atol=1e-9)
-
-
 def test_level_from_cloud_tilted_plane_recovers_horizontal():
-    # 端到端：倾斜平面 → 校正矩阵 → 平面恢复水平
+    # 端到端：倾斜平面 → 倾斜角 → 校正矩阵 → 平面恢复水平
     rng = np.random.default_rng(1)
     xy = rng.uniform(-2, 2, (1000, 2))
     pts = np.column_stack([xy, np.full(1000, 0.0)])
@@ -69,23 +56,41 @@ def test_level_from_cloud_tilted_plane_recovers_horizontal():
     rx = np.array([[1, 0, 0], [0, c, -s], [0, s, c]])
     tilted = pts @ rx.T
 
-    n_fit, r_align = level_from_cloud(tilted)
+    n_fit, tilt_x, tilt_y = level_from_cloud(tilted)
+    assert abs(tilt_x) > 0.1  # 绕 x 轴有约 2.5° 倾斜
+    assert abs(tilt_y) < 1e-6  # 绕 y 轴无倾斜
+
+    from scripts.install_config import rotation_matrix
+    r_align = rotation_matrix("y", tilt_y) @ rotation_matrix("x", tilt_x)
     corrected = tilted @ r_align.T
     n_corrected = fit_plane_normal(corrected)
     err = np.degrees(np.arccos(np.clip(n_corrected[2], -1, 1)))
     assert err < 1e-6
 
 
+def test_normal_to_tilt_angles_roundtrip():
+    # 法向量 → 倾斜角 → 重建矩阵 → 法向量回到 z
+    n = np.array([0.02, -0.03, 0.999])
+    n /= np.linalg.norm(n)
+    tilt_x, tilt_y = normal_to_tilt_angles(n)
+    from scripts.install_config import rotation_matrix
+    r = rotation_matrix("y", tilt_y) @ rotation_matrix("x", tilt_x)
+    np.testing.assert_allclose(r @ n, [0, 0, 1.0], atol=1e-9)
+
+
 def test_level_correction_roundtrip(tmp_path):
-    # 写回 YAML 后能重新加载
+    # 写回可读角度后能重新加载，且 level_correction_matrix 正确
     cfg = InstallConfig.side_mount()
+    cfg.level_tilt_x_deg = -1.5
+    cfg.level_tilt_y_deg = 2.0
     path = cfg.save(tmp_path / "install.yaml")
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    r = np.array([[1.0, 0.0, 0.0], [0.0, 0.999, -0.017], [0.0, 0.017, 0.999]])
-    data["turntable_level_correction"] = r.tolist()
-    path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
     loaded = InstallConfig.load(path)
-    np.testing.assert_allclose(loaded.level_correction, r, atol=1e-9)
+    assert loaded.level_tilt_x_deg == -1.5
+    assert loaded.level_tilt_y_deg == 2.0
+    m = loaded.level_correction_matrix()
+    from scripts.install_config import rotation_matrix
+    expected = rotation_matrix("y", 2.0) @ rotation_matrix("x", -1.5)
+    np.testing.assert_allclose(m, expected, atol=1e-9)
 
 
 def test_rotation_axis_vector_prefers_vector():

@@ -369,8 +369,9 @@ def main() -> None:
         rotated = rotate_points(frame, _INSTALL.rotation_axis_vector(), angle)
         # ⑤ 软件调平校正：转盘轴不竖直时，level_scan.py 拟合的水平面法向量
         #    → 校正矩阵（把水平面转回水平）叠加在聚合后点云上
-        if _INSTALL.level_correction is not None:
-            rotated = rotated @ _INSTALL.level_correction.T
+        _level_corr = _INSTALL.level_correction_matrix()
+        if _level_corr is not None:
+            rotated = rotated @ _level_corr.T
 
         # 增量写入固定缓冲，避免 vstack 全量复制
         n = rotated.shape[0]

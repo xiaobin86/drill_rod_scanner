@@ -63,49 +63,56 @@ def fit_plane_normal(points: np.ndarray, voxel_size: float = 0.05) -> np.ndarray
     return normal
 
 
-def align_to_z_matrix(v: np.ndarray) -> np.ndarray:
-    """把单位向量 v 旋转到世界 z=(0,0,1) 的旋转矩阵（最小旋转）。"""
-    v = np.asarray(v, dtype=np.float64)
-    v = v / np.linalg.norm(v)
-    z = np.array([0.0, 0.0, 1.0])
-    axis = np.cross(v, z)
-    nrm = np.linalg.norm(axis)
-    if nrm < 1e-12:
-        return np.eye(3) if v[2] > 0 else np.diag([1.0, -1.0, -1.0])
-    axis /= nrm
-    theta = np.arccos(np.clip(np.dot(v, z), -1.0, 1.0))
-    c, s = np.cos(theta), np.sin(theta)
-    kx, ky, kz = axis
-    K = np.array([[0.0, -kz, ky], [kz, 0.0, -kx], [-ky, kx, 0.0]])
-    return np.eye(3) + s * K + (1.0 - c) * (K @ K)
+def normal_to_tilt_angles(normal: np.ndarray) -> tuple[float, float]:
+    """法向量 → 可读倾斜角（度）：(绕世界 x 轴, 绕世界 y 轴)。
+
+    法向量 n=(nx,ny,nz) 表示水平面偏离竖直的方向：
+      tilt_x = atan2(ny, nz)  绕世界 x 轴倾斜（前后方向）
+      tilt_y = atan2(-nx, nz) 绕世界 y 轴倾斜（左右方向）
+    校正矩阵 = R_y(tilt_y) @ R_x(tilt_x)，把法向量旋转回 (0,0,1)。
+    """
+    n = np.asarray(normal, dtype=np.float64)
+    n = n / np.linalg.norm(n)
+    tilt_x = np.degrees(np.arctan2(n[1], n[2]))
+    z_rem = np.hypot(n[1], n[2])
+    tilt_y = np.degrees(np.arctan2(-n[0], z_rem))
+    return float(tilt_x), float(tilt_y)
 
 
-def level_from_cloud(points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """从点云标定：返回 (水平面法向量 n_fit, 校正矩阵 R_align)。
+def level_from_cloud(points: np.ndarray) -> tuple[np.ndarray, float, float]:
+    """从点云标定：返回 (水平面法向量 n_fit, tilt_x_deg, tilt_y_deg)。
 
-    R_align 应叠加在聚合后点云上：P_final = R_align @ P_aggregated。
+    tilt_x/tilt_y = 绕世界 x/y 轴的倾斜角，用于构建校正矩阵
+    R_align = R_y(tilt_y) @ R_x(tilt_x)，叠加在聚合后点云上恢复水平。
     """
     n_fit = fit_plane_normal(points)
-    r_align = align_to_z_matrix(n_fit)
-    return n_fit, r_align
+    tilt_x, tilt_y = normal_to_tilt_angles(n_fit)
+    return n_fit, tilt_x, tilt_y
 
 
-def write_level_correction(config_path: Path, r_align: np.ndarray) -> None:
-    """把校正矩阵写入 install config YAML（turntable_level_correction）。"""
+def write_level_correction(
+    config_path: Path, tilt_x_deg: float, tilt_y_deg: float, n_fit: np.ndarray
+) -> None:
+    """把可读倾斜角写入 install config YAML（level_tilt_x_deg / level_tilt_y_deg）。"""
     data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-    data["turntable_level_correction"] = [
-        [float(x) for x in row] for row in np.asarray(r_align, dtype=np.float64)
-    ]
+    data["level_tilt_x_deg"] = float(tilt_x_deg)
+    data["level_tilt_y_deg"] = float(tilt_y_deg)
+    # 同时保留法向量供人工核对（不参与计算）
+    data["level_normal"] = [float(x) for x in np.asarray(n_fit, dtype=np.float64)]
+    # 清理旧的矩阵形式（避免与角度重复/冲突）
+    data.pop("turntable_level_correction", None)
     config_path.write_text(
         yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8"
     )
-    print(f"[write] 校正矩阵已写入 {config_path}")
+    print(f"[write] 倾斜角已写入 {config_path}: "
+          f"tilt_x={tilt_x_deg:.4f}° tilt_y={tilt_y_deg:.4f}°")
 
 
 def apply_level_correction(points: np.ndarray, config: InstallConfig) -> np.ndarray:
     """对点云应用配置中的调平校正（若有）。"""
-    if config.level_correction is not None:
-        return points @ np.asarray(config.level_correction, dtype=np.float64).T
+    m = config.level_correction_matrix()
+    if m is not None:
+        return points @ np.asarray(m, dtype=np.float64).T
     return points
 
 
@@ -149,18 +156,25 @@ def main() -> None:
         points = _scan_ground(args)
         print(f"[scan] 采集完成 ({points.shape[0]} 点)")
 
-    n_fit, r_align = level_from_cloud(points)
+    n_fit, tilt_x, tilt_y = level_from_cloud(points)
     tilt = np.degrees(np.arccos(np.clip(n_fit[2], -1.0, 1.0)))
     print(f"[fit] 水平面法向量 = ({n_fit[0]:.4f}, {n_fit[1]:.4f}, {n_fit[2]:.4f})")
     print(f"[fit] 水平面倾斜角 = {tilt:.4f}°")
-    print("[fit] 校正矩阵 R_align（聚合后叠加）:")
-    for row in r_align:
+    print(f"[fit] 绕世界 x 轴倾斜 = {tilt_x:.4f}°（前后方向）")
+    print(f"[fit] 绕世界 y 轴倾斜 = {tilt_y:.4f}°（左右方向）")
+    print("[fit] 校正矩阵 R_align = R_y(tilt_y) @ R_x(tilt_x)，聚合后叠加:")
+
+    from install_config import InstallConfig  # noqa: PLC0415
+    cfg = InstallConfig(
+        level_tilt_x_deg=tilt_x, level_tilt_y_deg=tilt_y
+    )
+    for row in cfg.level_correction_matrix():
         print(f"      [{row[0]:+.6f} {row[1]:+.6f} {row[2]:+.6f}]")
 
     if args.dry_run:
         print("[dry-run] 未写回配置文件")
         return
-    write_level_correction(config_path, r_align)
+    write_level_correction(config_path, tilt_x, tilt_y, n_fit)
     print("[done] 后续扫描请重新运行 servo_sweep_scan.py 使用同一配置文件")
 
 

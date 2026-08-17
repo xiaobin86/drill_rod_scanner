@@ -77,7 +77,12 @@ class InstallConfig:
     # 任意方向单位向量（软件调平后由 level_scan.py 写入，优先于 turntable_axis）。
     turntable_axis: str = "z"
     turntable_axis_vector: np.ndarray | None = None
-    # 软件调平校正矩阵（level_scan.py 写回）：聚合后整体叠加，修正转盘轴不竖直
+    # 软件调平（转盘轴不竖直）：level_scan.py 拟合水平面后写回。
+    # 可读形式：level_tilt_x_deg / level_tilt_y_deg = 绕世界 x/y 轴倾斜角（度）；
+    # 兼容形式：level_correction = 3x3 校正矩阵（聚合后整体叠加）。
+    # 两者只需其一：有角度用角度算矩阵，否则用矩阵（向后兼容）。
+    level_tilt_x_deg: float = 0.0
+    level_tilt_y_deg: float = 0.0
     level_correction: np.ndarray | None = None
 
     # ---- 构造 ----
@@ -139,6 +144,14 @@ class InstallConfig:
             return v / np.linalg.norm(v)
         return _axis_vector(self.turntable_axis)
 
+    def level_correction_matrix(self) -> np.ndarray | None:
+        """软件调平校正矩阵：优先由可读倾斜角计算，否则用写回的矩阵（兼容）。"""
+        if self.level_tilt_x_deg or self.level_tilt_y_deg:
+            rx = rotation_matrix("x", self.level_tilt_x_deg)
+            ry = rotation_matrix("y", self.level_tilt_y_deg)
+            return ry @ rx
+        return self.level_correction
+
     # ---- 序列化 ----
     def to_dict(self) -> dict:
         d = {
@@ -152,6 +165,9 @@ class InstallConfig:
             d["turntable_axis_vector"] = [
                 float(x) for x in np.asarray(self.turntable_axis_vector, dtype=np.float64).tolist()
             ]
+        if self.level_tilt_x_deg or self.level_tilt_y_deg:
+            d["level_tilt_x_deg"] = float(self.level_tilt_x_deg)
+            d["level_tilt_y_deg"] = float(self.level_tilt_y_deg)
         if self.level_correction is not None:
             d["turntable_level_correction"] = [
                 [float(x) for x in row]
@@ -188,6 +204,8 @@ class InstallConfig:
             world_z=to_world.get("z", "-x"),
             turntable_axis=data.get("turntable_axis", "z"),
             turntable_axis_vector=axis_vec,
+            level_tilt_x_deg=float(data.get("level_tilt_x_deg", 0.0)),
+            level_tilt_y_deg=float(data.get("level_tilt_y_deg", 0.0)),
             level_correction=level_corr,
         )
 
