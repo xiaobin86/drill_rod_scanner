@@ -343,6 +343,8 @@ def main() -> None:
         frame = to_world(frame)
         # ④ 绕世界 z 轴（转盘轴）旋转，聚合 3D 扫描面
         rotated = rotate_points(frame, args.axis, angle)
+        # ⑤ 转盘轴微小倾斜修正：标定得到的 roll/pitch/yaw 把点云对齐回世界系
+        rotated = rotated @ _INSTALL.tilt_matrix().T
 
         # 增量写入固定缓冲，避免 vstack 全量复制
         n = rotated.shape[0]

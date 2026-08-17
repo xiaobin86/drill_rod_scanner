@@ -74,6 +74,11 @@ class InstallConfig:
     world_z: str = "-x"
     # 转盘旋转轴（世界系），拼接聚合时绕它旋转
     turntable_axis: str = "z"
+    # 安装后微小倾斜角（度），由 360° 自标定得到。
+    # 顺序：Rx(roll) -> Ry(pitch) -> Rz(yaw)，即 R_tilt = Rz @ Ry @ Rx。
+    tilt_roll_deg: float = 0.0
+    tilt_pitch_deg: float = 0.0
+    tilt_yaw_deg: float = 0.0
 
     # ---- 构造 ----
     @classmethod
@@ -125,6 +130,13 @@ class InstallConfig:
         """安装姿态：雷达系点 → 世界系点（行向量 p @ M）。"""
         return points @ self.to_world_matrix()
 
+    def tilt_matrix(self) -> np.ndarray:
+        """安装后微小倾斜修正矩阵：R_tilt = Rz(yaw) @ Ry(pitch) @ Rx(roll)。"""
+        rx = rotation_matrix("x", self.tilt_roll_deg)
+        ry = rotation_matrix("y", self.tilt_pitch_deg)
+        rz = rotation_matrix("z", self.tilt_yaw_deg)
+        return rz @ ry @ rx
+
     # ---- 序列化 ----
     def to_dict(self) -> dict:
         return {
@@ -133,6 +145,11 @@ class InstallConfig:
             "mount": {"axis": self.mount_axis, "angle_deg": self.mount_angle_deg},
             "to_world": {"x": self.world_x, "y": self.world_y, "z": self.world_z},
             "turntable_axis": self.turntable_axis,
+            "tilt": {
+                "roll_deg": float(self.tilt_roll_deg),
+                "pitch_deg": float(self.tilt_pitch_deg),
+                "yaw_deg": float(self.tilt_yaw_deg),
+            },
         }
 
     def save(self, path: str | Path) -> Path:
@@ -148,6 +165,7 @@ class InstallConfig:
             raise ValueError(f"配置文件格式错误（应为 YAML 映射）: {path}")
         mount = data.get("mount", {})
         to_world = data.get("to_world", {})
+        tilt = data.get("tilt", {})
         return cls(
             name=data.get("name", "custom"),
             description=data.get("description", ""),
@@ -157,6 +175,9 @@ class InstallConfig:
             world_y=to_world.get("y", "y"),
             world_z=to_world.get("z", "-x"),
             turntable_axis=data.get("turntable_axis", "z"),
+            tilt_roll_deg=float(tilt.get("roll_deg", 0.0)),
+            tilt_pitch_deg=float(tilt.get("pitch_deg", 0.0)),
+            tilt_yaw_deg=float(tilt.get("yaw_deg", 0.0)),
         )
 
 

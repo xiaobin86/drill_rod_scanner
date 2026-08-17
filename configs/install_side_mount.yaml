@@ -13,3 +13,7 @@ to_world:
   y: y
   z: -x
 turntable_axis: z
+tilt:
+  roll_deg: 0.0
+  pitch_deg: 0.0
+  yaw_deg: 0.0

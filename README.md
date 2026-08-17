@@ -65,6 +65,39 @@ python scripts/servo_sweep_scan.py \
 换安装方式改 YAML 配置文件即可。转盘绕世界 z 轴水平旋转，
 把不同时刻的竖直扫描弧聚合成 3D 扫描面。
 
+## 360° 自标定修正转盘轴倾斜
+
+若机械安装导致转盘轴不完全竖直，点云会出现分层/重影。可用 360° 自标定
+估计转盘轴相对世界 z 轴的倾斜（roll/pitch），并写回安装配置文件：
+
+```bash
+# 1. 先做一次 360° 扫描并保存点云
+python scripts/servo_sweep_scan.py \
+  --port /dev/ttyUSB0 --start 500 --end 2500 --step 50 --interval 1.5 \
+  --install-config configs/install_side_mount.yaml \
+  --save-dir output/scan_for_calib
+
+# 2. 用保存的点云标定，结果写回原 YAML
+python scripts/calibrate_tilt.py \
+  --cloud output/scan_for_calib/cloud.npy \
+  --install-config configs/install_side_mount.yaml
+```
+
+标定完成后，`configs/install_side_mount.yaml` 会新增可读角度字段：
+
+```yaml
+tilt:
+  roll_deg: 0.023
+  pitch_deg: -0.315
+  yaw_deg: 0.0
+```
+
+后续 `servo_sweep_scan.py` 使用同一配置文件时，会自动在转盘旋转后应用
+倾斜修正，点云恢复水平。
+
+标定原理：360° 扫描点云应关于实际转盘轴具有 180° 旋转对称性。算法通过
+Levenberg-Marquardt 优化找到该对称轴，再折算为 roll/pitch 写回配置。
+
 ## ROS2 发布（RViz 可视化）
 
 扫描保存点云后，可在 ROS2 环境（Docker `pallet_vision:humble` 或装有 ROS2 的机器）发布为 topic：
