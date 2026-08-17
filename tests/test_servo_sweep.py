@@ -38,11 +38,17 @@ def test_save_cloud(tmp_path):
     np.testing.assert_allclose(loaded, pts)
 
 
-def test_mount_transform_identity():
-    # 横装变换数学上恒等（扫描面固定在雷达 x-y 平面，坐标系跟随雷达）
-    pts = np.array([[1.0, 2.0, 3.0], [-1.0, 0.5, 0.0]])
+def test_mount_transform_rotation():
+    # 安装变换：绕雷达 z 轴转 90°（棱镜 0° 参考相位），0° 指 +x（下）→ +y（左）
+    pts = np.array([
+        [1.0, 0.0, 0.0],   # 雷达 x（下）-> y（左）
+        [0.0, 1.0, 0.0],   # 雷达 y（左）-> -x（上）
+        [0.0, 0.0, 1.0],   # 雷达 z（前）不变
+    ])
     out = mount_transform(pts)
-    np.testing.assert_allclose(out, pts)
+    np.testing.assert_allclose(out[0], [0.0, 1.0, 0.0], atol=1e-9)
+    np.testing.assert_allclose(out[1], [-1.0, 0.0, 0.0], atol=1e-9)
+    np.testing.assert_allclose(out[2], [0.0, 0.0, 1.0], atol=1e-9)
 
 
 def test_to_world_axis_mapping():
@@ -126,27 +132,37 @@ def test_turntable_aggregation_axis_y():
 def test_eccentric_offset_arc_reconstruction():
     """光心偏心圆弧运动的完整物理循环：世界点必须在各角度被精确重建。
 
-    物理模型：雷达系 x下/y左/z前，to_world（横装变换：世界x=雷达z、世界y=雷达y、世界z=-雷达x），
-    光心偏移 d（雷达系常量），转盘转 θ 时光心世界位置 = Rz(θ)·T·d。
-    重建公式（修复后）：P = Rz(θ)·T·(p + d)——先加 d 再旋转。
+    物理模型：雷达系 x下/y左/z前，mount_transform（绕雷达 z 轴 90°，棱镜相位），
+    to_world（横装变换：世界x=雷达z、世界y=雷达y、世界z=-雷达x）。
+    光心偏移 d（雷达系常量），先经 mount 得安装系偏移，转盘转 θ 时光心世界位置 = Rz(θ)·T·M·d。
+    重建公式（修复后）：P = Rz(θ)·T·(M·p + M·d)——先加 d（雷达系）再旋转。
     这是"各圆柱面" bug 的回归测试：若用 p - d（旧错误实现），
     重建点会随角度漂移而非固定在 P。
     """
     P = np.array([2.0, 0.0, 0.5])   # 世界系墙上的固定点
     d = np.array([0.055, 0.0, 0.0])  # 光心偏移（雷达系 x 下方 5.5cm）
     T = np.array([[0, 0, 1], [0, 1, 0], [-1, 0, 0]])  # to_world（横装变换）
+    M = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]])  # mount_transform（绕雷达 z 90°）
+    d_mount = M @ d                                    # 偏移经 mount 后
 
     def rotz(theta: float) -> np.ndarray:
         c, s = np.cos(np.deg2rad(theta)), np.sin(np.deg2rad(theta))
         return np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
 
     for theta in [0, 45, 90, 180, 270]:
-        C = rotz(theta) @ (T @ d)                    # 光心世界位置（圆弧运动）
-        p_radar = np.linalg.inv(T) @ (rotz(-theta) @ (P - C))  # 雷达系测量
-        # 修复后的重建：先加 d（雷达系），再 to_world，再绕世界 z（转盘轴）旋转
-        recon = rotate_points(to_world((p_radar + d).reshape(1, 3)), "z", theta)[0]
+        C = rotz(theta) @ (T @ d_mount)                    # 光心世界位置（圆弧运动）
+        p_mount = np.linalg.inv(T) @ (rotz(-theta) @ (P - C))  # to_world 前坐标
+        p_radar = np.linalg.inv(M) @ p_mount               # 雷达系测量（scan_to_xy 后）
+        # 修复后的重建：mount -> 加 d（雷达系，经 mount）-> to_world -> 绕世界 z（转盘轴）旋转
+        recon = rotate_points(
+            to_world(mount_transform(p_radar.reshape(1, 3)) + d_mount.reshape(1, 3)),
+            "z", theta,
+        )[0]
         np.testing.assert_allclose(recon, P, atol=1e-9)
 
         # 旧错误实现（减 d）应产生漂移——验证测试能捕获回归
-        bad = rotate_points(to_world((p_radar - d).reshape(1, 3)), "z", theta)[0]
+        bad = rotate_points(
+            to_world(mount_transform(p_radar.reshape(1, 3)) - d_mount.reshape(1, 3)),
+            "z", theta,
+        )[0]
         assert not np.allclose(bad, P, atol=1e-6), f"θ={theta}° 旧实现竟重建成功"

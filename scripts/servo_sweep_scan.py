@@ -60,23 +60,23 @@ def rotate_points(points: np.ndarray, axis: str, angle_deg: float) -> np.ndarray
 
 
 def mount_transform(points: np.ndarray) -> np.ndarray:
-    """雷达系（横装后）→ 横装坐标系：恒等。
+    """雷达系 → 安装后坐标系：绕雷达 z 轴转 90°（棱镜 0° 参考相位）。
 
-    扫描点 xyz 是雷达系坐标，横装（安装姿态）不改变它；
-    横装只改变雷达系相对于世界系的变换（to_world）。
-    本函数恒等保留，仅作数据流中"横装不影响雷达系坐标"的显式步骤。
+    扫描点 xyz 是雷达系坐标（0° 指 +x 下、90° 指 +y 左），横装（绕世界 y
+    向下转 90°，见 to_world）不改变它；但 LakiBeam 出厂 0° 参考与雷达 x 轴
+    存在 90° 夹角（棱镜相位），安装对齐后 0° 应指 +y（左）。
+    绕雷达 z 轴转 90°：(-y, x, z)，使 0° → +y（左）、90° → -x（上）。
     """
-    return points
+    return points[:, [1, 0, 2]] * np.array([-1.0, 1.0, 1.0])
 
 
 def to_world(points: np.ndarray) -> np.ndarray:
-    """雷达系 → 世界系（横装变换）。
+    """雷达系（安装后）→ 世界系（横装变换）。
 
-    雷达系（安装方式：x 向下、y 向左、z 向前），扫描弧在 x-y 平面
-    （0° 指 +x 下，90° 指 +y 左）。
     横装 = 雷达绕世界 y 轴向下转 90°（出厂 x 前 → 横装 x 下）：
     世界 x=雷达 z（前）、世界 y=雷达 y（左）、世界 z=-雷达 x（下→上）。
-    单帧弧由此落在世界 y-z 平面（x=0，0° 指 -z 下、90° 指 +y 左），
+    输入已含棱镜 90° 相位（mount_transform），0° 指 +y（左）、90° 指 -x（上）；
+    变换后单帧弧 0° 指世界 y（水平左）、90° 指世界 z（竖直上），
     转盘绕世界 z 轴（转盘轴）旋转聚合 3D，旋转轴用 --axis z。
     """
     return points[:, [2, 1, 0]] * np.array([1.0, 1.0, -1.0])
