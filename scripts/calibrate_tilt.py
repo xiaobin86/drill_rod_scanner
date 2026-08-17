@@ -22,7 +22,10 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+_SCRIPT_DIR = Path(__file__).resolve().parent
+_PROJECT_ROOT = _SCRIPT_DIR.parent
+sys.path.insert(0, str(_PROJECT_ROOT))
+sys.path.insert(0, str(_SCRIPT_DIR))
 from install_config import InstallConfig  # noqa: E402
 from drill_rod_scanner.calibration.tilt_calibration import calibrate_tilt  # noqa: E402
 
