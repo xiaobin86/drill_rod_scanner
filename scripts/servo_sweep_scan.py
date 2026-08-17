@@ -59,9 +59,31 @@ def rotation_matrix(axis: str, angle_deg: float) -> np.ndarray:
     raise ValueError(f"不支持的旋转轴: {axis}（可选 x/y/z）")
 
 
-def rotate_points(points: np.ndarray, axis: str, angle_deg: float) -> np.ndarray:
-    """将 (n,3) 点云绕指定轴旋转。"""
-    return points @ rotation_matrix(axis, angle_deg).T
+def rotation_matrix_axis_vector(axis: np.ndarray, angle_deg: float) -> np.ndarray:
+    """绕任意单位方向向量旋转 angle_deg 度的 3x3 矩阵（罗德里格斯公式）。
+
+    用于转盘轴不竖直时：绕标定出的实际转盘轴（世界系向量）旋转聚合，
+    而非假设轴 = 世界 z。axis 不必预先归一化（内部归一化）。
+    """
+    axis = np.asarray(axis, dtype=np.float64)
+    norm = np.linalg.norm(axis)
+    if norm == 0.0 or not np.all(np.isfinite(axis)):
+        raise ValueError(f"无效旋转轴向量: {axis}")
+    k = axis / norm
+    theta = np.deg2rad(angle_deg)
+    c, s = np.cos(theta), np.sin(theta)
+    kx, ky, kz = k
+    K = np.array([[0.0, -kz, ky],
+                  [kz, 0.0, -kx],
+                  [-ky, kx, 0.0]])
+    return np.eye(3) + s * K + (1.0 - c) * (K @ K)
+
+
+def rotate_points(points: np.ndarray, axis: str | np.ndarray, angle_deg: float) -> np.ndarray:
+    """将 (n,3) 点云绕指定轴旋转。axis 为字符串（x/y/z）或任意方向向量。"""
+    if isinstance(axis, str):
+        return points @ rotation_matrix(axis, angle_deg).T
+    return points @ rotation_matrix_axis_vector(axis, angle_deg).T
 
 
 def mount_transform(points: np.ndarray) -> np.ndarray:
@@ -232,7 +254,8 @@ def main() -> None:
                         help="归位后等待到位秒数（默认 3，含移动时间余量）")
     parser.add_argument("--servo-id", type=int, default=0, help="舵机 ID")
     parser.add_argument("--axis", default="z", choices=["x", "y", "z"],
-                        help="绕世界系哪个轴旋转拼接（默认 z = 转盘竖直轴）")
+                        help="绕世界系哪个轴旋转拼接（默认 z）。"
+                             "软件调平后改由配置 turntable_axis_vector 指定实际转盘轴，此参数仅作回退")
     parser.add_argument("--lidar-port", type=int, default=2368, help="雷达数据端口")
     parser.add_argument("--offset-y", type=float, default=0.0,
                         help="光心相对转盘轴心的 y 偏移（米，雷达系 y 方向）")
@@ -341,8 +364,13 @@ def main() -> None:
         frame[:, 2] += args.offset_z
         # ③ 雷达系 → 世界系（z 竖直 = 转盘轴）
         frame = to_world(frame)
-        # ④ 绕世界 z 轴（转盘轴）旋转，聚合 3D 扫描面
-        rotated = rotate_points(frame, args.axis, angle)
+        # ④ 绕转盘轴旋转，聚合 3D 扫描面。
+        #    轴 = 配置的实际转盘轴（默认世界 z；软件调平后为标定向量 n）
+        rotated = rotate_points(frame, _INSTALL.rotation_axis_vector(), angle)
+        # ⑤ 软件调平校正：转盘轴不竖直时，level_scan.py 拟合的水平面法向量
+        #    → 校正矩阵（把水平面转回水平）叠加在聚合后点云上
+        if _INSTALL.level_correction is not None:
+            rotated = rotated @ _INSTALL.level_correction.T
 
         # 增量写入固定缓冲，避免 vstack 全量复制
         n = rotated.shape[0]

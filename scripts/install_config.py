@@ -72,8 +72,13 @@ class InstallConfig:
     world_x: str = "z"
     world_y: str = "y"
     world_z: str = "-x"
-    # 转盘旋转轴（世界系），拼接聚合时绕它旋转
+    # 转盘旋转轴（世界系），拼接聚合时绕它旋转。
+    # turntable_axis: 坐标轴名（x/y/z，向后兼容）；turntable_axis_vector:
+    # 任意方向单位向量（软件调平后由 level_scan.py 写入，优先于 turntable_axis）。
     turntable_axis: str = "z"
+    turntable_axis_vector: np.ndarray | None = None
+    # 软件调平校正矩阵（level_scan.py 写回）：聚合后整体叠加，修正转盘轴不竖直
+    level_correction: np.ndarray | None = None
 
     # ---- 构造 ----
     @classmethod
@@ -125,15 +130,34 @@ class InstallConfig:
         """安装姿态：雷达系点 → 世界系点（行向量 p @ M）。"""
         return points @ self.to_world_matrix()
 
+    def rotation_axis_vector(self) -> np.ndarray:
+        """转盘旋转轴（世界系）单位向量：优先 turntable_axis_vector，否则坐标轴。"""
+        if self.turntable_axis_vector is not None:
+            v = np.asarray(self.turntable_axis_vector, dtype=np.float64)
+            if v.shape != (3,) or not np.all(np.isfinite(v)) or np.linalg.norm(v) == 0.0:
+                raise ValueError(f"无效的 turntable_axis_vector: {self.turntable_axis_vector}")
+            return v / np.linalg.norm(v)
+        return _axis_vector(self.turntable_axis)
+
     # ---- 序列化 ----
     def to_dict(self) -> dict:
-        return {
+        d = {
             "name": self.name,
             "description": self.description,
             "mount": {"axis": self.mount_axis, "angle_deg": self.mount_angle_deg},
             "to_world": {"x": self.world_x, "y": self.world_y, "z": self.world_z},
             "turntable_axis": self.turntable_axis,
         }
+        if self.turntable_axis_vector is not None:
+            d["turntable_axis_vector"] = [
+                float(x) for x in np.asarray(self.turntable_axis_vector, dtype=np.float64).tolist()
+            ]
+        if self.level_correction is not None:
+            d["turntable_level_correction"] = [
+                [float(x) for x in row]
+                for row in np.asarray(self.level_correction, dtype=np.float64)
+            ]
+        return d
 
     def save(self, path: str | Path) -> Path:
         out = Path(path)
@@ -148,6 +172,12 @@ class InstallConfig:
             raise ValueError(f"配置文件格式错误（应为 YAML 映射）: {path}")
         mount = data.get("mount", {})
         to_world = data.get("to_world", {})
+        axis_vec = data.get("turntable_axis_vector")
+        if axis_vec is not None:
+            axis_vec = np.asarray(axis_vec, dtype=np.float64)
+        level_corr = data.get("turntable_level_correction")
+        if level_corr is not None:
+            level_corr = np.asarray(level_corr, dtype=np.float64)
         return cls(
             name=data.get("name", "custom"),
             description=data.get("description", ""),
@@ -157,6 +187,8 @@ class InstallConfig:
             world_y=to_world.get("y", "y"),
             world_z=to_world.get("z", "-x"),
             turntable_axis=data.get("turntable_axis", "z"),
+            turntable_axis_vector=axis_vec,
+            level_correction=level_corr,
         )
 
 

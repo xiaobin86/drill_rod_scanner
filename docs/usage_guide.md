@@ -220,6 +220,36 @@ python scripts/servo_sweep_scan.py --install-config configs/install_upright.yaml
 
 **换安装后的标定流程**：改完安装配置后，先用单帧可视化确认弧的方向
 （0° 应指向水平、90° 指向竖直），再实测偏心 `--offset-y/--offset-z`。
+若发现水平面倾斜（转盘轴不竖直），用软件调平（见 §1.6）。
+
+### 1.6 软件调平（转盘轴不竖直时）
+
+转盘轴不竖直会导致扫描出的水平面（地面/桌面）整体倾斜。用 `level_scan.py`
+标定并自动写回配置文件，后续扫描自动校正：
+
+```bash
+# 方式 1（推荐）：对已保存的扫描点云离线标定
+python scripts/level_scan.py \
+  --cloud output/scan_时间戳/cloud.npy \
+  --install-config configs/install_side_mount.yaml
+
+# 方式 2：连接硬件实时采一圈地面后标定
+python scripts/level_scan.py --scan \
+  --install-config configs/install_side_mount.yaml \
+  --start 500 --end 2500 --step 100
+```
+
+输出示例：
+```
+[fit] 水平面法向量 = (0.0000, -0.0533, 0.9986)
+[fit] 水平面倾斜角 = 3.0578°
+[write] 校正矩阵已写入 configs/install_side_mount.yaml
+```
+
+标定后重新运行 `servo_sweep_scan.py`（使用同一 config），水平面自动恢复水平
+（经仿真验证：校正后偏离竖直 0.000000°）。
+
+**注意**：拟合的是点云中最大的水平平面——确保扫描时地面/桌面可见且未被大面积遮挡。
 
 ---
 

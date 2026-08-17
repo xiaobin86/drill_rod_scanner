@@ -97,7 +97,13 @@ z = offset_z_m              # 向前（安装偏移，通常 0）
 `tests/test_servo_sweep.py::test_eccentric_offset_arc_reconstruction` 有回归测试。
 几何图解与推导见 [[drill_scan_eccentricity]]。
 
-### ④ 绕世界 z 轴（转盘轴）旋转拼接
+### ⑤ 软件调平校正（转盘轴不竖直时）
+转盘轴不竖直 → 聚合后水平面倾斜。`level_scan.py` 拟合水平面法向量 `n_fit`，
+生成校正矩阵 `R_align`（`n_fit` → 世界 z）写回 config；聚合后整体叠加
+`rotated = rotated @ R_align.T`，水平面恢复水平（误差 0，见仿真验证）。
+**不能**直接把 `n_fit` 当聚合轴（它是真实轴镜像，会导致误差加倍）。
+
+### ⑥ 绕世界 z 轴（转盘轴）旋转拼接
 ```python
 angle = servo_pos_to_angle(pos, start, end, angle_start, angle_end)
 rotated = rotate_points(frame, axis='z', angle)
@@ -241,7 +247,7 @@ python3 scripts/publish_pointcloud.py --file output/cloud.npy --topic /drill_sca
 
 > 角度说明：舵机位置 500-2500 固定映射 0-360°，角度由位置自动计算，无需手动指定。
 
-## 9. 测试覆盖（39 项全部通过）
+## 9. 测试覆盖（56 项全部通过）
 
 | 测试文件 | 覆盖内容 |
 |----------|---------|
@@ -250,6 +256,8 @@ python3 scripts/publish_pointcloud.py --file output/cloud.npy --topic /drill_sca
 | `test_stitcher.py` | 拼接算法（旋转合并/体素下采样） |
 | `test_scanner.py` | 扫描编排（mock 串口：角度序列/采帧/拼接/空帧跳过） |
 | `test_cli.py` | 配置加载 |
+| `test_install_config.py` | 安装配置（mount/to_world 矩阵、YAML 读写、任意轴旋转） |
+| `test_level_scan.py` | 软件调平（平面拟合、对齐矩阵、端到端校正、config 写回） |
 | `test_serial_servo/lidar.py` | 驱动接口骨架 |
 
 ## 10. 关键实现坑位回顾（调试经验）
@@ -266,3 +274,6 @@ python3 scripts/publish_pointcloud.py --file output/cloud.npy --topic /drill_sca
 7. **变换必须纯旋转**：早期 to_world=(y,z,-x) 是反射（det=-1，右手系变左手系），
    靠硬编码 90° 相位"凑"出看似对的结果；正确做法是 mount 棱镜相位（绕 z 90°）
    与 to_world（Ry90 横装）各司其职、全为 det=+1 旋转
+8. **软件调平**：转盘轴不竖直 → 水平面倾斜。拟合水平面法向量 n_fit 生成校正矩阵
+   R_align（n_fit→z）叠加聚合后点云即可恢复水平（误差 0）；**不能**把 n_fit
+   直接当聚合轴（它是真实轴的镜像，直接用作轴误差加倍）

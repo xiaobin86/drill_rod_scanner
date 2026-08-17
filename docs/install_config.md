@@ -93,3 +93,26 @@ LakiBeam 出厂坐标系：**x 前、y 左、z 上**（扫描弧在 x-y 水平�
 
 正确架构：scan_to_xy 纯几何 + mount（棱镜相位，绕 z 90°）+ to_world（Ry90 横装，纯旋转），
 全部变换 det=+1，每个自由度可独立配置。
+
+## 7. 软件调平（转盘轴不竖直）
+
+转盘轴不竖直时，扫描出的水平面（地面）会整体倾斜。标定流程：
+
+1. 扫描一圈（点云中含地面/桌面等大片水平平面）
+2. `scripts/level_scan.py` 拟合水平面法向量 `n_fit`（RANSAC + SVD）
+3. 计算把 `n_fit` 对齐到世界 z 的校正矩阵 `R_align`
+4. 自动写回 config（新增 `turntable_level_correction` 字段）
+5. 后续扫描聚合后整体叠加 `R_align` → 水平面恢复水平（误差 0）
+
+```bash
+# 离线标定已保存点云
+python scripts/level_scan.py --cloud output/scan_xxx/cloud.npy \
+    --install-config configs/install_side_mount.yaml
+# 或在线采集
+python scripts/level_scan.py --scan --install-config configs/install_side_mount.yaml
+```
+
+**原理说明**：转盘轴不竖直时，绕世界 z 聚合的点云中水平面呈现倾斜，
+其法向量 `n_fit` 即反映转盘轴相对竖直的偏差。把整个点云旋转 `R_align`
+（`n_fit` → z）即可校回水平。**注意**：不能直接把 `n_fit` 当聚合轴用
+（它是真实轴的镜像，直接用作轴会让误差加倍，仿真已证）。
