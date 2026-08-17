@@ -8,9 +8,10 @@ Open3D 黑色背景绿色点实时显示。
 坐标系约定:
   雷达系（安装方式）: x 向下, y 向左, z 向前; 自转扫描弧在 x-y 竖直平面（0° 指 +x 下）。
   世界系: z 轴竖直（转盘旋转轴）, x/y 水平（转盘平面）。
-  坐标处理: 极坐标 -> 雷达系 xyz -> 横装变换(恒等, 横装不改变雷达系坐标)
-  -> 偏心校正(offset-y/z) -> to_world(横装变换=绕世界 y 向下转 90°, 雷达系->世界系)
-  -> 绕世界 z 轴（转盘轴）旋转聚合 3D 扫描面。
+  坐标处理: 极坐标 -> 雷达系 xyz -> 安装配置变换(mount 棱镜相位 + to_world 安装姿态)
+  -> 偏心校正(offset-y/z) -> 绕世界 z 轴（转盘轴）旋转聚合 3D 扫描面。
+  安装方式可配置: 默认横装(configs/install_side_mount.yaml), 换安装方式用
+  --install-config 指定 YAML（见 scripts/install_config.py 的格式说明）。
   因此拼接旋转轴默认 --axis z（= 世界转盘轴）。
 
 用法:
@@ -32,7 +33,11 @@ import serial
 import threading
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from install_config import InstallConfig  # noqa: E402
 from lakibeam_viewer import LakiBeamViewer, ScanPoint, scan_to_xy  # noqa: E402
+
+# 安装配置（横装默认）。换安装方式：--install-config 指向 YAML，或改此默认。
+_INSTALL: InstallConfig = InstallConfig.side_mount()
 
 
 def rotation_matrix(axis: str, angle_deg: float) -> np.ndarray:
@@ -60,18 +65,18 @@ def rotate_points(points: np.ndarray, axis: str, angle_deg: float) -> np.ndarray
 
 
 def mount_transform(points: np.ndarray) -> np.ndarray:
-    """雷达系 → 安装后坐标系：绕雷达 z 轴转 90°（棱镜 0° 参考相位）。
+    """棱镜 0° 参考相位：绕雷达 z 轴转 90°（由 _INSTALL 配置）。
 
     扫描点 xyz 是雷达系坐标（0° 指 +x 下、90° 指 +y 左），横装（绕世界 y
     向下转 90°，见 to_world）不改变它；但 LakiBeam 出厂 0° 参考与雷达 x 轴
     存在 90° 夹角（棱镜相位），安装对齐后 0° 应指 +y（左）。
-    绕雷达 z 轴转 90°：(-y, x, z)，使 0° → +y（左）、90° → -x（上）。
+    换安装方式时通过 --install-config 覆盖 _INSTALL。
     """
-    return points[:, [1, 0, 2]] * np.array([-1.0, 1.0, 1.0])
+    return _INSTALL.mount_transform(points)
 
 
 def to_world(points: np.ndarray) -> np.ndarray:
-    """雷达系（安装后）→ 世界系（横装变换）。
+    """雷达系（安装后）→ 世界系（安装姿态，由 _INSTALL 配置）。
 
     横装 = 雷达绕世界 y 轴向下转 90°（出厂 x 前 → 横装 x 下）：
     世界 x=雷达 z（前）、世界 y=雷达 y（左）、世界 z=-雷达 x（下→上）。
@@ -79,7 +84,7 @@ def to_world(points: np.ndarray) -> np.ndarray:
     变换后单帧弧 0° 指世界 y（水平左）、90° 指世界 z（竖直上），
     转盘绕世界 z 轴（转盘轴）旋转聚合 3D，旋转轴用 --axis z。
     """
-    return points[:, [2, 1, 0]] * np.array([1.0, 1.0, -1.0])
+    return _INSTALL.to_world(points)
 
 
 def save_cloud(points: np.ndarray, output_dir: str, cloud_format: str = "ply") -> dict[str, Path]:
@@ -210,6 +215,9 @@ def main() -> None:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("--port", default="/dev/ttyUSB0", help="舵机串口")
+    parser.add_argument("--install-config", type=str, default="",
+                        help="雷达安装方式 YAML 配置路径（默认内置横装 side-mount，"
+                             "见 configs/install_side_mount.yaml）")
     parser.add_argument("--baud", type=int, default=115200, help="舵机波特率")
     parser.add_argument("--start", type=int, default=500, help="舵机起始位置 P")
     parser.add_argument("--end", type=int, default=1000, help="舵机结束位置 P（含）")
@@ -245,6 +253,17 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="只打印舵机指令不连串口")
     parser.add_argument("--debug", action="store_true", help="打印每包诊断信息")
     args = parser.parse_args()
+
+    # 安装配置：默认横装，可用 --install-config 指定 YAML 覆盖
+    global _INSTALL
+    if args.install_config:
+        _INSTALL = InstallConfig.load(args.install_config)
+        print(f"[install] 加载安装配置: {args.install_config}")
+        print(f"          {_INSTALL.description}（棱镜相位 绕{_INSTALL.mount_axis} "
+              f"{_INSTALL.mount_angle_deg}°，to_world x={_INSTALL.world_x} "
+              f"y={_INSTALL.world_y} z={_INSTALL.world_z}）")
+    else:
+        print(f"[install] 默认安装配置: {_INSTALL.name}（{_INSTALL.description}）")
 
     # 未指定 --save-dir 时，默认用带时间戳目录（每次扫描独立，不覆盖）
     if not args.save_dir:

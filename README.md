@@ -45,7 +45,7 @@ Open3D 黑底绿点实时显示：
 conda activate drill_rod_scanner
 python scripts/servo_sweep_scan.py \
   --port /dev/ttyUSB0 --start 500 --end 2500 --step 50 --interval 1.5 \
-  --axis z --angle-start 0 --angle-end 360 --offset-x 0.055 \
+  --axis z --offset-y -0.055 --offset-z 0.025 \
   --save-dir output
 ```
 
@@ -53,13 +53,16 @@ python scripts/servo_sweep_scan.py \
 - `--start/--end/--step`：舵机位置 P 值范围与增量（对应 `servo_sweep_demo.py`）
 - `--interval`：每个位置停留秒数（等雷达采完一圈）
 - `--axis`：点云旋转轴（默认 `z`：绕世界 z 竖直转盘轴）
-- `--angle-start/--angle-end`：start/end 位置对应的旋转角度（度）
-- `--offset-x/--offset-z`：光心相对转盘轴心的偏心校正（米）
+- `--install-config`：雷达安装方式 YAML 配置（默认横装 `configs/install_side_mount.yaml`，
+  换安装方式复制该文件修改即可，无需改代码）
+- `--offset-y/--offset-z`：光心相对转盘轴心的偏心校正（米，雷达系 y/z 方向）
 - `--save-dir`：扫描完成后保存点云到该目录（PLY+PCD+numpy），留空不保存
 - `--dry-run`：只打印舵机指令，不连串口（可先验证指令格式）
 
-坐标系约定：雷达系 x 向前、y 朝上、z 向右，自转扫描弧在 x-y 竖直平面；
-世界系 z 轴竖直（转盘旋转轴）。转盘绕世界 z 轴水平旋转，
+坐标系约定（横装）：雷达系 x 向下、y 向左、z 向前，自转扫描弧在雷达 x-y 平面
+（0° 指 +x 下、90° 指 +y 左）；世界系 z 轴竖直（转盘旋转轴）。
+安装姿态由 `InstallConfig`（棱镜 0° 相位 + 雷达系→世界系轴映射）描述，
+换安装方式改 YAML 配置文件即可。转盘绕世界 z 轴水平旋转，
 把不同时刻的竖直扫描弧聚合成 3D 扫描面。
 
 ## ROS2 发布（RViz 可视化）

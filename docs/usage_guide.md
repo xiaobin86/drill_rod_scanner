@@ -50,6 +50,7 @@ python scripts/servo_sweep_scan.py
 |------|------|------|
 | `--port` | /dev/ttyUSB0 | 舵机串口设备 |
 | `--baud` | 115200 | 舵机波特率 |
+| `--install-config` | "" | 雷达安装方式 YAML 配置（默认内置横装 side-mount，见 `configs/install_side_mount.yaml`） |
 | `--start` | 500 | 舵机起始位置 P |
 | `--end` | 1000 | 舵机结束位置 P（含） |
 | `--step` | 10 | 每次位置增量 |
@@ -59,8 +60,8 @@ python scripts/servo_sweep_scan.py
 | `--servo-id` | 0 | 舵机 ID |
 | `--axis` | z | 拼接旋转轴（z = 世界转盘轴） |
 | `--lidar-port` | 2368 | 雷达 UDP 数据端口 |
-| `--offset-x` | 0.0 | 光心偏心 x 校正（米） |
-| `--offset-z` | 0.0 | 光心偏心 z 校正（米） |
+| `--offset-y` | 0.0 | 光心偏心 y 校正（米，雷达系 y 方向） |
+| `--offset-z` | 0.0 | 光心偏心 z 校正（米，雷达系 z 方向） |
 | `--max-range` | 50.0 | 最大显示/拼接距离（米） |
 | `--save-dir` | 自动时间戳 | 保存点云目录，默认 `output/scan_时间戳/`（每次独立），可用 `--save-dir` 指定 |
 | `--continuous` | - | 连续转动模式（发一条命令连续转，全程记录帧后抽帧融合） |
@@ -93,7 +94,7 @@ python scripts/servo_sweep_scan.py --dry-run --start 500 --end 540 --step 20
 conda activate ros_humble
 python3 scripts/servo_sweep_scan.py \
   --start 500 --end 2500 --step 1 --interval 0.05 \
-  --offset-x -0.055 --offset-z -0.025 \
+  --offset-y -0.055 --offset-z 0.025 \
   --max-range 20 \
   --publish-topic /drill_scan_cloud
 ```
@@ -112,7 +113,7 @@ python scripts/servo_sweep_scan.py \
 python scripts/servo_sweep_scan.py \
   --continuous --total-time 60 \
   --start 500 --end 2500 --step 50 \
-  --offset-x -0.055 --offset-z -0.025 \
+  --offset-y -0.055 --offset-z 0.025 \
   --max-range 20
 ```
 转盘 60 秒连续转完 360°，全程记录雷达每一帧到默认目录 `output/scan_时间戳/frames.npz`，
@@ -128,7 +129,7 @@ conda activate ros_humble     # 需在 ros_humble 环境（含 ROS2 + 项目依�
 python3 scripts/servo_sweep_scan.py \
   --continuous --total-time 10 \
   --start 500 --end 2500 --step 1 \
-  --offset-x -0.055 --offset-z -0.025 \
+  --offset-y -0.055 --offset-z 0.025 \
   --max-range 20 \
   --publish-topic /drill_scan_cloud
 ```
@@ -139,16 +140,16 @@ python3 scripts/servo_sweep_scan.py \
 
 | 参数 | 值 | 说明 |
 |------|-----|------|
-| `--offset-x` | **-0.055** | 光心沿雷达 x 方向偏心（负 = 后方） |
-| `--offset-z` | **-0.025** | 光心沿雷达 z 方向偏心（负 = 左侧） |
+| `--offset-y` | **-0.055** | 光心沿雷达 y 方向偏心（左 5.5cm） |
+| `--offset-z` | **0.025** | 光心沿雷达 z 方向偏心（前 2.5cm） |
 
-**含义**：光心相对转盘轴心在两个方向都有偏移（x 方向 5.5cm、z 方向 2.5cm），
+**含义**：光心相对转盘轴心在两个方向都有偏移（y 方向 5.5cm、z 方向 2.5cm），
 用这两个参数在坐标变换前把光心平移到转盘轴心。安装改变后需重新标定。
 
 ![光心双偏心示意](figures/eccentric_dual_offset.png)
 
-> 图：俯视图（x-z 平面）。O 为转盘轴心，C 为光心（相对轴心偏移
-> -5.5cm/-2.5cm），转盘旋转时光心沿蓝色虚线圆弧绕轴心运动。
+> 图：俯视图（雷达系 y-z 平面）。O 为转盘轴心，C 为光心（相对轴心偏移
+> -5.5cm/+2.5cm），转盘旋转时光心沿蓝色虚线圆弧绕轴心运动。
 
 扫描抽帧融合完成后自动发布点云，另开终端查看：
 ```bash
@@ -164,17 +165,61 @@ python scripts/servo_sweep_scan.py --debug \
 ```
 每包打印：`[debug] 包 1206B, 首块方位角 144.0, 解析 187 点`。
 
-**⑥ 偏心标定**：本机实测双偏心 `--offset-x -0.055 --offset-z -0.025`
-（光心偏 x 后方 5.5cm、z 左方 2.5cm），详见 §1.3.1 示意图：
+**⑥ 偏心标定**：本机实测双偏心 `--offset-y -0.055 --offset-z 0.025`
+（光心偏 y 左方 5.5cm、z 前方 2.5cm），详见 §1.3.1 示意图：
 ```bash
-python scripts/servo_sweep_scan.py --offset-x -0.055 --offset-z -0.025 ...
+python scripts/servo_sweep_scan.py --offset-y -0.055 --offset-z 0.025 ...
 ```
 
 ### 1.4 坐标系说明（重要）
 
-- 雷达系：x 向前、y 朝上、z 向右；扫描弧在 x-y 竖直面（0° 指前）
-- 世界系：z 竖直（转盘轴）、x/y 水平
-- 坐标链：极坐标 → 雷达系xyz → 偏心校正 → to_world → 绕世界 z 旋转
+- **雷达系**（横装）：x 向下、y 向左、z 向前；扫描弧在雷达 x-y 平面（0° 指 +x 下、90° 指 +y 左）。xyz 是雷达系坐标，横装不改变它。
+- **世界系**：z 竖直（转盘轴）、x/y 水平（转盘平面）
+- **坐标链**：极坐标 → 雷达系xyz → 安装配置变换（mount 棱镜相位 + to_world 安装姿态）→ 偏心校正 → 绕世界 z（转盘轴）旋转聚合
+- **安装配置**：默认横装（`configs/install_side_mount.yaml`），换安装方式用 `--install-config` 指定 YAML，格式见 `scripts/install_config.py` 与下文 §1.5
+
+### 1.5 安装方式配置（换雷达安装不用改代码）
+
+安装方式由两个自由度描述，对应两个独立的变换：
+
+| 变换 | 物理含义 | 配置项 |
+|------|---------|--------|
+| **mount** | 棱镜 0° 参考相位：LakiBeam 出厂 0° 参考与雷达 x 轴存在夹角，安装时绕雷达某轴旋转对齐 | `mount.axis` / `mount.angle_deg` |
+| **to_world** | 安装姿态：雷达系三轴相对世界系（转盘系）的指向 | `to_world.x/y/z`（世界系各轴取自雷达系哪个轴，可带负号） |
+
+**默认横装配置**（`configs/install_side_mount.yaml`）：
+```yaml
+name: side-mount
+description: 横装：雷达 x 下、y 左、z 前（默认）
+mount:
+  axis: z
+  angle_deg: 90.0        # 棱镜 0° 参考绕雷达 z 轴 90°
+to_world:
+  x: z                   # 世界 x = 雷达 z（前）
+  y: y                   # 世界 y = 雷达 y（左）
+  z: -x                  # 世界 z = -雷达 x（下→上）
+turntable_axis: z        # 转盘旋转轴（世界系）
+```
+
+**换安装方式**：复制一份 YAML 修改后指定即可，例如把雷达正装（出厂姿态 x 前/y 左/z 上、棱镜 0° 相位）：
+```yaml
+# configs/install_upright.yaml
+name: upright
+mount:
+  axis: z
+  angle_deg: 0.0
+to_world:
+  x: x
+  y: y
+  z: z
+turntable_axis: z
+```
+```bash
+python scripts/servo_sweep_scan.py --install-config configs/install_upright.yaml ...
+```
+
+**换安装后的标定流程**：改完安装配置后，先用单帧可视化确认弧的方向
+（0° 应指向水平、90° 指向竖直），再实测偏心 `--offset-y/--offset-z`。
 
 ---
 
@@ -305,7 +350,7 @@ conda activate ros_humble
 python3 scripts/servo_sweep_scan.py \
   --continuous --total-time 10 \
   --start 500 --end 2500 --step 1 \
-  --offset-x -0.055 --offset-z -0.025 \
+  --offset-y -0.055 --offset-z 0.025 \
   --max-range 20 \
   --publish-topic /drill_scan_cloud
 
@@ -322,7 +367,7 @@ rviz2
 conda activate ros_humble
 python3 scripts/servo_sweep_scan.py \
   --start 500 --end 2500 --step 1 --interval 0.05 \
-  --offset-x -0.055 --offset-z -0.025 \
+  --offset-y -0.055 --offset-z 0.025 \
   --max-range 20 \
   --publish-topic /drill_scan_cloud
 

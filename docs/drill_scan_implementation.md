@@ -1,7 +1,7 @@
 # drill_rod_scanner 扫描方法实现原理
 
-> 日期：2026-08-12
-> 依据：当前代码（`main` 分支 HEAD `4909e80`），以代码实际实现为准
+> 日期：2026-08-17
+> 依据：当前代码（`main` 分支 HEAD `9cd0606` 之后），以代码实际实现为准
 
 ## 1. 系统概述
 
@@ -47,20 +47,22 @@
 
 | 坐标系     | 定义                                                      |
 | ------- | ------------------------------------------------------- |
-| **雷达系** | **x 向前、y 朝上、z 向右**；扫描弧在 x-y 竖直面（0° 指 +x 前方，90° 指 +y 上方） |
+| **雷达系** | **x 向下、y 向左、z 向前**（横装）；扫描弧在雷达 x-y 平面（0° 指 +x 下，90° 指 +y 左） |
 | **世界系** | **z 竖直（转盘旋转轴）、x/y 水平**（转盘平面）                            |
 
 **关键结论**（经物理仿真验证）：
 - 扫描平面永远是雷达系的 **x-y 平面**，极坐标→xyz 转换**不因横装改变**
-- 横装变换在数学上**恒等**（`mount_transform()` 返回原值）——因为扫描点坐标数值不变，
-  变化的只是 y 轴语义（出厂横向 → 横装朝上）
-- `to_world()` 完成雷达系 → 世界系的轴映射：
-  ```
-  世界 x = 雷达 x（前）
-  世界 y = 雷达 z（右）
-  世界 z = 雷达 y（上）
-  ```
-  实现：`points[:, [0, 2, 1]]`
+  （xyz 是雷达系坐标，安装姿态不改变它的数值）
+- 安装姿态由**两个自由度**描述，全部可配置（`scripts/install_config.py` + YAML）：
+  - **mount（棱镜相位）**：LakiBeam 出厂 0° 参考与雷达 x 轴存在 90° 夹角，
+    安装对齐后绕雷达 z 轴转 90°（0° 指 +y 左）
+  - **to_world（安装姿态）**：雷达系 → 世界系轴映射：
+    ```
+    世界 x = 雷达 z（前）
+    世界 y = 雷达 y（左）
+    世界 z = -雷达 x（下→上）
+    ```
+    等价于绕世界 y 轴向下转 90°（`Ry(90°)`，det=+1 纯旋转）
 
 ## 4. 坐标处理链（每帧）
 
@@ -68,32 +70,34 @@
 
 ### ① 极坐标 → 雷达系 xyz（`scan_to_xy()`）
 ```python
-x = dist_mm/1000 * cos(θ)   # 向前
-y = dist_mm/1000 * sin(θ)   # 朝上（竖直扫描弧）
-z = offset_z_m              # 向右（安装偏移，通常 0）
+x = dist_mm/1000 * cos(θ)   # 向下（0° 指 +x）
+y = dist_mm/1000 * sin(θ)   # 向左（90° 指 +y）
+z = offset_z_m              # 向前（安装偏移，通常 0）
 ```
 随后按 `--max-range` 过滤水平距离超限的点。
 
-### ② 横装变换（`mount_transform()`，恒等）
-保留步骤以便扩展——若实际安装有额外倾斜，在此叠加旋转矩阵。
+### ② 安装配置变换（`mount_transform()` + `to_world()`）
+由 `InstallConfig`（默认横装）提供：
+- `mount_transform()`：绕雷达 z 轴转 90°（棱镜 0° 参考相位）→ 0° 指 +y（左）
+- `to_world()`：雷达系 → 世界系（横装姿态，世界 z 竖直 = 转盘轴）
+
+换安装方式时通过 `--install-config` 指定 YAML 覆盖（见 §1.5 使用指南），不改代码。
 
 ### ③ 光心偏心校正（关键物理！）
 雷达光心**不在转盘旋转轴上**（实测偏 5.5cm），转盘旋转时光心绕轴做**圆弧运动**。
 同一世界点在不同转盘角度测得距离不同，必须补偿：
 
 ```
-世界点 P = Rz(θ) · (雷达系测量 p + 光心偏移 d)
+世界点 P = Rz(θ) · T · (p + d)
 ```
 
-**必须"先加 d 再旋转"**（`frame[:,0] += offset_x; frame[:,2] += offset_z`）。
-若用"先减再旋转"（`p - d`），每帧补偿方向错误 → 点云随角度漂移成"各圆柱面"。
-此问题由 `--offset-x / --offset-z` 参数配置，`tests/test_servo_sweep.py::test_eccentric_offset_arc_reconstruction`
-有回归测试。几何图解与推导见 [[drill_scan_eccentricity]]。
+**必须"先加 d 再旋转"**（`frame[:,1] += offset_y; frame[:,2] += offset_z`，
+偏移在雷达系 y/z 方向）。若用"先减再旋转"（`p - d`），每帧补偿方向错误 →
+点云随角度漂移成"各圆柱面"。此问题由 `--offset-y / --offset-z` 参数配置，
+`tests/test_servo_sweep.py::test_eccentric_offset_arc_reconstruction` 有回归测试。
+几何图解与推导见 [[drill_scan_eccentricity]]。
 
-### ④ 雷达系 → 世界系（`to_world()`）
-轴重排 `(x, y, z) → (x, z, y)`，使世界 z 竖直 = 转盘轴。
-
-### ⑤ 绕世界 z 轴（转盘轴）旋转拼接
+### ④ 绕世界 z 轴（转盘轴）旋转拼接
 ```python
 angle = servo_pos_to_angle(pos, start, end, angle_start, angle_end)
 rotated = rotate_points(frame, axis='z', angle)
@@ -220,6 +224,7 @@ python3 scripts/publish_pointcloud.py --file output/cloud.npy --topic /drill_sca
 | 参数 | 默认 | 说明 |
 |------|------|------|
 | `--port` | /dev/ttyUSB0 | 舵机串口 |
+| `--install-config` | "" | 雷达安装方式 YAML（默认横装 side-mount） |
 | `--start/--end/--step` | 500/1000/10 | 舵机位置 P 范围与步进（500-2500=360°） |
 | `--interval` | 2.0 | 每位置停留秒数 |
 | `--move-time` | 2000 | 舵机移动耗时 ms |
@@ -227,7 +232,7 @@ python3 scripts/publish_pointcloud.py --file output/cloud.npy --topic /drill_sca
 | `--axis` | z | 旋转轴（世界 z = 转盘轴） |
 | `--continuous` | - | 连续转动模式（记录全部帧后抽帧融合） |
 | `--total-time` | 60.0 | 连续模式转盘总耗时（秒） |
-| `--offset-x/--offset-z` | 0 | 光心偏心校正（米） |
+| `--offset-y/--offset-z` | 0 | 光心偏心校正（米，雷达系 y/z 方向） |
 | `--max-range` | 50 | 最大显示/拼接距离 |
 | `--save-dir` | "" | 保存点云目录（空=不保存） |
 | `--grid` | -1 | 网格半宽（<0 自动= max-range，0 关闭） |
@@ -255,5 +260,9 @@ python3 scripts/publish_pointcloud.py --file output/cloud.npy --topic /drill_sca
 3. **Open3D 空包围盒空白**：全 NaN/空点云 add → 退化包围盒 → 不渲染；首帧真实数据后再 add
 4. **增长点云卡顿**：点数变化必须 remove/add 重建 GPU 缓冲；预分配固定缓冲 + update_geometry 解决
 5. **偏心先加 d 再旋转**：`P = Rz(θ)·(p + d)`，顺序/符号错 → "各圆柱面"漂移
-6. **坐标系以实测为准**：最终采用 x前/y上/z右 + to_world=(x,z,y) + 绕世界 z 旋转，
-   与实机点云验证一致
+6. **坐标系以实测为准**：最终采用横装 x下/y左/z前，scan_to_xy 纯雷达系（0° 指 +x 下），
+   安装变换 = 棱镜相位（绕雷达 z 90°）+ to_world（绕世界 y 向下 90°），
+   单帧弧 0° 指世界 y 水平、90° 指世界 z 竖直，与实机点云验证一致
+7. **变换必须纯旋转**：早期 to_world=(y,z,-x) 是反射（det=-1，右手系变左手系），
+   靠硬编码 90° 相位"凑"出看似对的结果；正确做法是 mount 棱镜相位（绕 z 90°）
+   与 to_world（Ry90 横装）各司其职、全为 det=+1 旋转

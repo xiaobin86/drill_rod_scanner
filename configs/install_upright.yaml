@@ -1,0 +1,13 @@
+# 雷达安装方式配置示例：正装（出厂姿态）
+# 雷达 x 前、y 左、z 上，棱镜 0° 参考无偏转（出厂默认）。
+# 用法: python scripts/servo_sweep_scan.py --install-config configs/install_upright.yaml
+name: upright
+description: 正装（出厂姿态）：雷达 x 前、y 左、z 上
+mount:
+  axis: z
+  angle_deg: 0.0
+to_world:
+  x: x
+  y: y
+  z: z
+turntable_axis: z
