@@ -35,18 +35,28 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from install_config import InstallConfig  # noqa: E402
 
 
-def fit_plane_normal(points: np.ndarray) -> np.ndarray:
-    """RANSAC 拟合点云中最大水平平面，返回其法向量（z>0）。
+def fit_plane_normal(points: np.ndarray, voxel_size: float = 0.05) -> np.ndarray:
+    """拟合点云中最大水平平面，返回其法向量（z>0）。
 
-    points: (n,3) 点云。内部对 z 方向做主成分约束，剔除离群点后
-    用最小二乘拟合平面，法向量取 SVD 最小奇异值对应方向。
+    points: (n,3) 点云。先按 voxel_size 体素降采样（百万级点云直接 SVD
+    会内存爆炸），再最小二乘拟合平面，法向量取 SVD 最小奇异值方向。
+    降采样不影响法向量方向（只影响精度），0.05m 对 1° 级倾斜标定足够。
     """
     pts = np.asarray(points, dtype=np.float64)
     if pts.ndim != 2 or pts.shape[1] != 3 or pts.shape[0] < 10:
         raise ValueError(f"点云至少需要 10 个点，当前形状 {pts.shape}")
 
+    if pts.shape[0] > 200_000:
+        import open3d as o3d
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(pts)
+        pcd = pcd.voxel_down_sample(voxel_size)
+        pts = np.asarray(pcd.points)
+        if pts.shape[0] < 10:
+            raise ValueError(f"体素降采样后点数不足: {pts.shape[0]}（尝试增大 voxel_size）")
+
     centroid = pts.mean(axis=0)
-    _, _, vt = np.linalg.svd(pts - centroid)
+    _, _, vt = np.linalg.svd(pts - centroid, full_matrices=False)
     normal = vt[-1]
     if normal[2] < 0:
         normal = -normal

@@ -17,6 +17,16 @@ def test_fit_plane_normal_horizontal():
     np.testing.assert_allclose(n, [0, 0, 1.0], atol=1e-9)
 
 
+def test_fit_plane_normal_large_cloud_downsampled():
+    # 百万级点云自动降采样后仍能正确拟合（回归：SVD 内存爆炸）
+    rng = np.random.default_rng(3)
+    n_pts = 300_000
+    xy = rng.uniform(-5, 5, (n_pts, 2))
+    pts = np.column_stack([xy, rng.normal(0, 0.001, n_pts)])
+    n = fit_plane_normal(pts)
+    np.testing.assert_allclose(n, [0, 0, 1.0], atol=1e-6)
+
+
 def test_fit_plane_normal_tilted():
     # 倾斜平面（绕 x 转 3°）：法向量应含对应分量
     rng = np.random.default_rng(7)
