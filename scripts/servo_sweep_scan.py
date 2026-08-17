@@ -215,9 +215,10 @@ def main() -> None:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("--port", default="/dev/ttyUSB0", help="舵机串口")
-    parser.add_argument("--install-config", type=str, default="",
-                        help="雷达安装方式 YAML 配置路径（默认内置横装 side-mount，"
-                             "见 configs/install_side_mount.yaml）")
+    parser.add_argument("--install-config", type=str,
+                        default="configs/install_side_mount.yaml",
+                        help="雷达安装方式 YAML 配置路径（默认 configs/install_side_mount.yaml，"
+                             "传空字符串则使用内置横装 side-mount）")
     parser.add_argument("--baud", type=int, default=115200, help="舵机波特率")
     parser.add_argument("--start", type=int, default=500, help="舵机起始位置 P")
     parser.add_argument("--end", type=int, default=1000, help="舵机结束位置 P（含）")
@@ -234,10 +235,10 @@ def main() -> None:
     parser.add_argument("--axis", default="z", choices=["x", "y", "z"],
                         help="绕世界系哪个轴旋转拼接（默认 z = 转盘竖直轴）")
     parser.add_argument("--lidar-port", type=int, default=2368, help="雷达数据端口")
-    parser.add_argument("--offset-y", type=float, default=0.0,
-                        help="光心相对转盘轴心的 y 偏移（米，雷达系 y 方向）")
-    parser.add_argument("--offset-z", type=float, default=0.0,
-                        help="光心相对转盘轴心的 z 偏移（米，雷达系 z 方向）")
+    parser.add_argument("--offset-y", type=float, default=None,
+                        help="光心相对转盘轴心的 y 偏移（米，雷达系 y 方向，默认读取配置文件）")
+    parser.add_argument("--offset-z", type=float, default=None,
+                        help="光心相对转盘轴心的 z 偏移（米，雷达系 z 方向，默认读取配置文件）")
     parser.add_argument("--max-range", type=float, default=50.0, help="最大显示距离（米）")
     parser.add_argument("--save-dir", type=str, default="",
                         help="扫描完成后保存点云到该目录（PLY+PCD+npz），留空不保存")
@@ -254,16 +255,45 @@ def main() -> None:
     parser.add_argument("--debug", action="store_true", help="打印每包诊断信息")
     args = parser.parse_args()
 
+    def _print_install_config(cfg: InstallConfig) -> None:
+        """打印当前生效的安装配置项。"""
+        print(f"[install] name:        {cfg.name}")
+        print(f"[install] description: {cfg.description}")
+        print(f"[install] mount:       axis={cfg.mount_axis} angle_deg={cfg.mount_angle_deg}")
+        print(f"[install] to_world:    x={cfg.world_x} y={cfg.world_y} z={cfg.world_z}")
+        print(f"[install] turntable:   axis={cfg.turntable_axis}")
+        if hasattr(cfg, "tilt_roll_deg"):
+            print(
+                f"[install] tilt:        "
+                f"roll_deg={cfg.tilt_roll_deg} pitch_deg={cfg.tilt_pitch_deg} yaw_deg={cfg.tilt_yaw_deg}"
+            )
+        if hasattr(cfg, "lidar_tilt_roll_deg"):
+            print(
+                f"[install] lidar_tilt:  "
+                f"roll_deg={cfg.lidar_tilt_roll_deg} "
+                f"pitch_deg={cfg.lidar_tilt_pitch_deg} "
+                f"yaw_deg={cfg.lidar_tilt_yaw_deg}"
+            )
+        if hasattr(cfg, "offset_y_m"):
+            print(
+                f"[install] offset:      "
+                f"y_m={cfg.offset_y_m} z_m={cfg.offset_z_m}"
+            )
+
     # 安装配置：默认横装，可用 --install-config 指定 YAML 覆盖
     global _INSTALL
     if args.install_config:
         _INSTALL = InstallConfig.load(args.install_config)
         print(f"[install] 加载安装配置: {args.install_config}")
-        print(f"          {_INSTALL.description}（棱镜相位 绕{_INSTALL.mount_axis} "
-              f"{_INSTALL.mount_angle_deg}°，to_world x={_INSTALL.world_x} "
-              f"y={_INSTALL.world_y} z={_INSTALL.world_z}）")
     else:
-        print(f"[install] 默认安装配置: {_INSTALL.name}（{_INSTALL.description}）")
+        print("[install] 使用默认安装配置")
+    _print_install_config(_INSTALL)
+
+    # 偏心校正：命令行参数优先，未指定时读取配置文件
+    if args.offset_y is None:
+        args.offset_y = _INSTALL.offset_y_m if hasattr(_INSTALL, "offset_y_m") else 0.0
+    if args.offset_z is None:
+        args.offset_z = _INSTALL.offset_z_m if hasattr(_INSTALL, "offset_z_m") else 0.0
 
     # 未指定 --save-dir 时，默认用带时间戳目录（每次扫描独立，不覆盖）
     if not args.save_dir:
@@ -332,18 +362,20 @@ def main() -> None:
             print(f"  [skip] {label}: 滤波后无点")
             return
 
-        # ① 横装变换（出厂系 → 横装系，数学上恒等）
+        # ① LiDAR 安装姿态微小偏差修正（雷达系，最先应用）
+        frame = frame @ _INSTALL.lidar_tilt_matrix().T
+        # ② 横装变换（出厂系 → 横装系，数学上恒等）
         frame = mount_transform(frame)
-        # ② 光心偏心校正：光心绕转盘轴做圆弧运动，
+        # ③ 光心偏心校正：光心绕转盘轴做圆弧运动，
         #    世界点 = Rz(θ)·(雷达系测量 + 光心偏移d)，须先加 d 再旋转
         #    （x下/y左/z前 安装：偏移在雷达系 y/z 方向）
         frame[:, 1] += args.offset_y
         frame[:, 2] += args.offset_z
-        # ③ 雷达系 → 世界系（z 竖直 = 转盘轴）
+        # ④ 雷达系 → 世界系（z 竖直 = 转盘轴）
         frame = to_world(frame)
-        # ④ 绕世界 z 轴（转盘轴）旋转，聚合 3D 扫描面
+        # ⑤ 绕世界 z 轴（转盘轴）旋转，聚合 3D 扫描面
         rotated = rotate_points(frame, args.axis, angle)
-        # ⑤ 转盘轴微小倾斜修正：标定得到的 roll/pitch/yaw 把点云对齐回世界系
+        # ⑥ 转盘轴微小倾斜修正：标定得到的 roll/pitch/yaw 把点云对齐回世界系
         rotated = rotated @ _INSTALL.tilt_matrix().T
 
         # 增量写入固定缓冲，避免 vstack 全量复制

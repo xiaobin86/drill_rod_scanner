@@ -79,6 +79,14 @@ class InstallConfig:
     tilt_roll_deg: float = 0.0
     tilt_pitch_deg: float = 0.0
     tilt_yaw_deg: float = 0.0
+    # LiDAR 安装姿态相对理想横装的偏差（度）。
+    # 顺序：Rx(roll) -> Ry(pitch) -> Rz(yaw)，即 R_lidar = Rz @ Ry @ Rx。
+    lidar_tilt_roll_deg: float = 0.0
+    lidar_tilt_pitch_deg: float = 0.0
+    lidar_tilt_yaw_deg: float = 0.0
+    # 光心相对转盘轴心的偏心校正（米，雷达系 y/z 方向）
+    offset_y_m: float = 0.0
+    offset_z_m: float = 0.0
 
     # ---- 构造 ----
     @classmethod
@@ -137,6 +145,13 @@ class InstallConfig:
         rz = rotation_matrix("z", self.tilt_yaw_deg)
         return rz @ ry @ rx
 
+    def lidar_tilt_matrix(self) -> np.ndarray:
+        """LiDAR 安装偏差矩阵：R_lidar = Rz(yaw) @ Ry(pitch) @ Rx(roll)。"""
+        rx = rotation_matrix("x", self.lidar_tilt_roll_deg)
+        ry = rotation_matrix("y", self.lidar_tilt_pitch_deg)
+        rz = rotation_matrix("z", self.lidar_tilt_yaw_deg)
+        return rz @ ry @ rx
+
     # ---- 序列化 ----
     def to_dict(self) -> dict:
         return {
@@ -149,6 +164,15 @@ class InstallConfig:
                 "roll_deg": float(self.tilt_roll_deg),
                 "pitch_deg": float(self.tilt_pitch_deg),
                 "yaw_deg": float(self.tilt_yaw_deg),
+            },
+            "lidar_tilt": {
+                "roll_deg": float(self.lidar_tilt_roll_deg),
+                "pitch_deg": float(self.lidar_tilt_pitch_deg),
+                "yaw_deg": float(self.lidar_tilt_yaw_deg),
+            },
+            "offset": {
+                "y_m": float(self.offset_y_m),
+                "z_m": float(self.offset_z_m),
             },
         }
 
@@ -166,6 +190,8 @@ class InstallConfig:
         mount = data.get("mount", {})
         to_world = data.get("to_world", {})
         tilt = data.get("tilt", {})
+        lidar_tilt = data.get("lidar_tilt", {})
+        offset = data.get("offset", {})
         return cls(
             name=data.get("name", "custom"),
             description=data.get("description", ""),
@@ -178,6 +204,11 @@ class InstallConfig:
             tilt_roll_deg=float(tilt.get("roll_deg", 0.0)),
             tilt_pitch_deg=float(tilt.get("pitch_deg", 0.0)),
             tilt_yaw_deg=float(tilt.get("yaw_deg", 0.0)),
+            lidar_tilt_roll_deg=float(lidar_tilt.get("roll_deg", 0.0)),
+            lidar_tilt_pitch_deg=float(lidar_tilt.get("pitch_deg", 0.0)),
+            lidar_tilt_yaw_deg=float(lidar_tilt.get("yaw_deg", 0.0)),
+            offset_y_m=float(offset.get("y_m", 0.0)),
+            offset_z_m=float(offset.get("z_m", 0.0)),
         )
 
 
