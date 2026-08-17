@@ -65,10 +65,13 @@ python scripts/servo_sweep_scan.py \
 换安装方式改 YAML 配置文件即可。转盘绕世界 z 轴水平旋转，
 把不同时刻的竖直扫描弧聚合成 3D 扫描面。
 
-## 360° 自标定修正转盘轴倾斜
+## 360° 自标定修正转盘轴倾斜 + LiDAR 安装偏航
 
-若机械安装导致转盘轴不完全竖直，点云会出现分层/重影。可用 360° 自标定
-估计转盘轴相对世界 z 轴的倾斜（roll/pitch），并写回安装配置文件：
+若机械安装导致转盘轴不完全竖直，或雷达绕自身 z 轴有扭转，点云会出现分层、
+重影或地面倾斜。可用 360° 自标定同时估计两类参数：
+
+- **转盘轴倾斜**：`tilt.roll` / `tilt.pitch`
+- **LiDAR 安装偏航**：`lidar_tilt.yaw`
 
 ```bash
 # 1. 先做一次 360° 扫描并保存点云
@@ -90,13 +93,39 @@ tilt:
   roll_deg: 0.023
   pitch_deg: -0.315
   yaw_deg: 0.0
+lidar_tilt:
+  roll_deg: 0.0
+  pitch_deg: 0.0
+  yaw_deg: 1.512
+offset:
+  y_m: -0.055
+  z_m: 0.025
 ```
 
-后续 `servo_sweep_scan.py` 使用同一配置文件时，会自动在转盘旋转后应用
-倾斜修正，点云恢复水平。
+后续 `servo_sweep_scan.py` 使用同一配置文件时，会自动应用上述修正。
 
-标定原理：360° 扫描点云应关于实际转盘轴具有 180° 旋转对称性。算法通过
-Levenberg-Marquardt 优化找到该对称轴，再折算为 roll/pitch 写回配置。
+### 标定可靠性验证（真值仿真）
+
+可用配置文件作为真值，仿真一次 360° 扫描，再运行标定程序检查误差：
+
+```bash
+python scripts/verify_tilt_calibration.py \
+  --config configs/install_side_mount.yaml \
+  --voxel-size 0.05
+```
+
+输出会打印 `tilt` 与 `lidar_tilt` 的真值、估计值和误差。该脚本依赖
+`joint_tilt_calibration.calibrate_tilt`，也作为标定算法的回归测试。
+
+### 标定能力边界
+
+- **可标定**：`tilt.roll`、`tilt.pitch`、`lidar_tilt.yaw`。
+- **固定为 0**：`lidar_tilt.roll`（等价于全局偏航，单次 360° 扫描不可观）、
+  `lidar_tilt.pitch`（为避免与 `tilt.pitch` 耦合，程序固定为 0）。
+- 标定原理：360° 扫描点云关于实际转盘轴具有 180° 旋转对称性；
+  对侧角度扫描的同名点在校正后应重合。算法先通过地面平整度估计
+  `lidar_tilt.yaw`，再通过 180° 对侧点重合度估计 `tilt.roll/pitch`，
+  交替迭代优化。
 
 ## ROS2 发布（RViz 可视化）
 

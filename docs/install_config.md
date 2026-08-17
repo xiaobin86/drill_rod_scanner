@@ -32,6 +32,19 @@ to_world:                     # 雷达系 → 世界系轴映射（可带负号�
   y: y                        # 世界 y 轴 = 雷达 y 轴
   z: -x                       # 世界 z 轴 = -雷达 x 轴
 turntable_axis: z             # 转盘旋转轴（世界系），默认 z
+
+# 以下三项由 360° 自标定程序自动写入，也可手工微调。
+tilt:                         # 转盘轴相对世界 z 轴的倾斜
+  roll_deg: 0.0               # 绕世界 x 轴
+  pitch_deg: 0.0              # 绕世界 y 轴
+  yaw_deg: 0.0                # 通常保持 0（安装对齐）
+lidar_tilt:                   # LiDAR 相对理想安装姿态的偏差
+  roll_deg: 0.0               # 绕雷达 x 轴（全局偏航，程序固定为 0）
+  pitch_deg: 0.0              # 绕雷达 y 轴（程序固定为 0）
+  yaw_deg: 0.0                # 绕雷达 z 轴（可标定）
+offset:                       # 光心相对转盘轴心的偏心（米，雷达系）
+  y_m: 0.0
+  z_m: 0.0
 ```
 
 用法：`python scripts/servo_sweep_scan.py --install-config configs/xxx.yaml ...`
