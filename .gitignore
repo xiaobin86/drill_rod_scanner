@@ -12,3 +12,6 @@ output/
 docs/.obsidian/
 docs/.claudian/
 docs/.omo/
+
+# 隔离工作区
+.worktrees/
