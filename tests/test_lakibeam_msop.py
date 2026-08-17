@@ -137,20 +137,20 @@ def test_parse_short_packet_returns_empty():
 
 
 def test_scan_to_xy_conversion():
-    # 弧在雷达 x-y 平面，0°（指向 +x 下）
+    # 弧在雷达 x-y 平面，绕 z 轴转 90°：0° 指 +y（左）
     pts = [ScanPoint(angle=0.0, dist_mm=2300, rssi=49)]
     xy = scan_to_xy(pts)
-    np.testing.assert_allclose(xy[0], [2.3, 0.0, 0.0], atol=1e-9)
+    np.testing.assert_allclose(xy[0], [0.0, 2.3, 0.0], atol=1e-9)
 
-    # 角度 90°（指向 +y 左）
+    # 角度 90°（指向 -x 下）
     pts = [ScanPoint(angle=90.0, dist_mm=1000, rssi=10)]
     xy = scan_to_xy(pts)
-    np.testing.assert_allclose(xy[0], [0.0, 1.0, 0.0], atol=1e-9)
+    np.testing.assert_allclose(xy[0], [-1.0, 0.0, 0.0], atol=1e-9)
 
     # 指定沿 z 方向（向前）的安装偏移
     pts = [ScanPoint(angle=0.0, dist_mm=1000, rssi=10)]
     xy = scan_to_xy(pts, offset_z_m=0.5)
-    np.testing.assert_allclose(xy[0], [1.0, 0.0, 0.5], atol=1e-9)
+    np.testing.assert_allclose(xy[0], [0.0, 1.0, 0.5], atol=1e-9)
 
 
 def test_scan_to_xy_empty():
