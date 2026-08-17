@@ -8,7 +8,7 @@ Open3D 黑色背景绿色点实时显示。
 坐标系约定:
   雷达系（安装方式）: x 向下, y 向左, z 向前; 自转扫描弧在 x-y 竖直平面（0° 指 +x 下）。
   世界系: z 轴竖直（转盘旋转轴）, x/y 水平（转盘平面）。
-  坐标处理: 极坐标 -> 雷达系 xyz -> 横装变换(恒等) -> 偏心校正(offset-x/z)
+  坐标处理: 极坐标 -> 雷达系 xyz -> 横装变换(恒等) -> 偏心校正(offset-y/z)
   -> to_world(雷达系->世界系) -> 绕世界 z 轴（转盘轴）旋转聚合 3D 扫描面。
   因此拼接旋转轴默认 --axis z（= 世界转盘轴）。
 
@@ -225,10 +225,10 @@ def main() -> None:
     parser.add_argument("--axis", default="z", choices=["x", "y", "z"],
                         help="绕世界系哪个轴旋转拼接（默认 z = 转盘竖直轴）")
     parser.add_argument("--lidar-port", type=int, default=2368, help="雷达数据端口")
-    parser.add_argument("--offset-x", type=float, default=0.0,
-                        help="光心相对转盘轴心的 x 偏移（米，旋转前校正）")
+    parser.add_argument("--offset-y", type=float, default=0.0,
+                        help="光心相对转盘轴心的 y 偏移（米，雷达系 y 方向）")
     parser.add_argument("--offset-z", type=float, default=0.0,
-                        help="光心相对转盘轴心的 z 偏移（米，旋转前校正）")
+                        help="光心相对转盘轴心的 z 偏移（米，雷达系 z 方向）")
     parser.add_argument("--max-range", type=float, default=50.0, help="最大显示距离（米）")
     parser.add_argument("--save-dir", type=str, default="",
                         help="扫描完成后保存点云到该目录（PLY+PCD+npz），留空不保存")
@@ -316,7 +316,8 @@ def main() -> None:
         frame = mount_transform(frame)
         # ② 光心偏心校正：光心绕转盘轴做圆弧运动，
         #    世界点 = Rz(θ)·(雷达系测量 + 光心偏移d)，须先加 d 再旋转
-        frame[:, 0] += args.offset_x
+        #    （x下/y左/z前 安装：偏移在雷达系 y/z 方向）
+        frame[:, 1] += args.offset_y
         frame[:, 2] += args.offset_z
         # ③ 雷达系 → 世界系（z 竖直 = 转盘轴）
         frame = to_world(frame)
