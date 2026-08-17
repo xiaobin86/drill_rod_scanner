@@ -143,8 +143,8 @@ def scan_to_xy(points: list[ScanPoint], offset_z_m: float = 0.0) -> np.ndarray:
     thetas = np.deg2rad(angles)
     return np.column_stack([
         dists * np.cos(thetas),                        # x 向下（0° 指向 +x）
-        dists * np.sin(thetas),                        # y 朝上（竖直扫描弧）
-        np.full(len(points), offset_z_m, dtype=np.float64),  # z 向右（安装偏移）
+        dists * np.sin(thetas),                        # y 向左（竖直扫描弧）
+        np.full(len(points), offset_z_m, dtype=np.float64),  # z 向前（安装偏移）
     ])
 
 
