@@ -8,9 +8,5 @@ to_world:
   y: y
   z: -x
 turntable_axis: z
-level_tilt_x_deg: -1.5671860977160408
-level_tilt_y_deg: -1.8087567881983473
-level_normal:
-- 0.03156351808189998
-- -0.02733552006559887
-- 0.9991278765348492
+level_tilt_x_deg: -1.8185002964881527
+level_tilt_y_deg: -1.377633977822607

@@ -91,16 +91,15 @@ def level_from_cloud(points: np.ndarray) -> tuple[np.ndarray, float, float]:
 
 
 def write_level_correction(
-    config_path: Path, tilt_x_deg: float, tilt_y_deg: float, n_fit: np.ndarray
+    config_path: Path, tilt_x_deg: float, tilt_y_deg: float
 ) -> None:
     """把可读倾斜角写入 install config YAML（level_tilt_x_deg / level_tilt_y_deg）。"""
     data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     data["level_tilt_x_deg"] = float(tilt_x_deg)
     data["level_tilt_y_deg"] = float(tilt_y_deg)
-    # 同时保留法向量供人工核对（不参与计算）
-    data["level_normal"] = [float(x) for x in np.asarray(n_fit, dtype=np.float64)]
-    # 清理旧的矩阵形式（避免与角度重复/冲突）
+    # 清理旧的矩阵/法向量形式（避免与角度重复/冲突）
     data.pop("turntable_level_correction", None)
+    data.pop("level_normal", None)
     config_path.write_text(
         yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8"
     )
@@ -174,7 +173,7 @@ def main() -> None:
     if args.dry_run:
         print("[dry-run] 未写回配置文件")
         return
-    write_level_correction(config_path, tilt_x, tilt_y, n_fit)
+    write_level_correction(config_path, tilt_x, tilt_y)
     print("[done] 后续扫描请重新运行 servo_sweep_scan.py 使用同一配置文件")
 
 
