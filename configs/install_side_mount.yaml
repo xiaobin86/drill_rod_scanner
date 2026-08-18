@@ -18,7 +18,7 @@ tilt:
   pitch_deg: 0.0
   yaw_deg: 0.0
 lidar_tilt:
-  roll_deg: 1.5
+  roll_deg: 0.0
   pitch_deg: 0.0
   yaw_deg: 1.5
 offset:

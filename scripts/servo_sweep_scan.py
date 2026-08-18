@@ -315,6 +315,18 @@ def main() -> None:
     print(f"[home] 等待 {args.home_wait}s 到位...")
     time.sleep(args.home_wait)
 
+    # 根据 step 动态计算 move_time
+    # 舵机速度约 375°/秒，step 对应的角度 = step * 360 / 2000
+    step_angle = args.step * 360.0 / 2000.0
+    calculated_move_time = int(step_angle / 375.0 * 1000) + 100  # 加 100ms 余量
+    if args.move_time == 2000:  # 用户未指定，使用计算值
+        args.move_time = calculated_move_time
+        print(f"[info] 根据 step={args.step} 自动设置 move_time={args.move_time}ms (step角度={step_angle:.2f}°)")
+    
+    # 检查 move_time 和 interval 的关系
+    if args.move_time > args.interval * 1000:
+        print(f"[warn] move_time({args.move_time}ms) > interval({args.interval}s)，舵机可能无法在 interval 内到位，建议增加 interval 或减少 move_time")
+
     if args.dry_run:
         print("\n[dry-run] 仅验证舵机指令序列（含归位），不连接雷达/Open3D，退出")
         return
@@ -337,14 +349,24 @@ def main() -> None:
     if grid_half > 0.0:
         grid = create_ground_grid(grid_half, args.grid_step, z_level=0.0)
         vis.add_geometry(grid)
-        # 渲染器首轮 poll 前 add 的几何体不会显示，需先驱动一帧
         vis.poll_events()
         vis.update_renderer()
+
+    # 雷达坐标系（用 LineSet 手动画 XYZ 轴，避免 coordinate_frame 方向问题）
+    lidar_frame_lines = o3d.geometry.LineSet()
+    lidar_frame_lines.points = o3d.utility.Vector3dVector(np.zeros((6, 3)))
+    lidar_frame_lines.lines = o3d.utility.Vector2iVector(np.array([[0, 1], [2, 3], [4, 5]]))
+    lidar_frame_lines.colors = o3d.utility.Vector3dVector(np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]]))
+    lidar_frame_added = False
+
+    # 世界坐标系参考（原点处）
+    world_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5, origin=[0, 0, 0])
+    world_frame_added = False
 
     # 预分配固定大小缓冲：点数永不变，避免每帧 remove/add 重建 GPU 缓冲导致的卡顿。
     # 未用部分以 NaN 填充，Open3D 渲染时跳过且不参与包围盒。
     positions = list(range(args.start, args.end + 1, args.step))
-    points_per_frame = 4000  # 每圈点云上限（含余量，覆盖 10Hz 的 0.1° 分辨率 ~3600 点）
+    points_per_frame = 4000  # 每帧最大点数（10Hz 雷达约 2600 点/帧，留 50% 余量）
     max_points = len(positions) * points_per_frame
     cloud_buf = np.full((max_points, 3), np.nan, dtype=np.float64)
     color_buf = np.tile([0.0, 1.0, 0.0], (max_points, 1))  # 绿色点
@@ -352,9 +374,9 @@ def main() -> None:
     pcd: o3d.geometry.PointCloud | None = None
     total_points = 0
 
-    def process_frame(scan, angle: float, label: str) -> None:
+    def process_frame(scan, angle: float, label: str, pos_index: int = 0) -> None:
         """单帧雷达点：坐标变换 → 写入缓冲 → Open3D 更新。"""
-        nonlocal total_points, pcd
+        nonlocal total_points, pcd, world_frame_added, lidar_frame_added
         frame = scan_to_xy(scan)
         dist = np.linalg.norm(frame[:, :2], axis=1)
         frame = frame[dist <= args.max_range]
@@ -396,18 +418,50 @@ def main() -> None:
             pcd = o3d.geometry.PointCloud()
             pcd.points = o3d.utility.Vector3dVector(cloud_buf)
             pcd.colors = o3d.utility.Vector3dVector(color_buf)
-            vis.add_geometry(pcd)
+            vis.add_geometry(pcd, reset_bounding_box=True)
+            
+            # 在第一帧数据到来后添加坐标系（避免影响包围盒）
+            if not world_frame_added:
+                vis.add_geometry(world_frame, reset_bounding_box=False)
+                world_frame_added = True
+            if not lidar_frame_added:
+                vis.add_geometry(lidar_frame_lines, reset_bounding_box=False)
+                lidar_frame_added = True
+            
             ctr = vis.get_view_control()
-            ctr.set_front([0.0, 0.0, 1.0])
-            ctr.set_up([0.0, 1.0, 0.0])
+            ctr.set_front([0.0, -1.0, 0.5])
             ctr.set_lookat([0.0, 0.0, 0.0])
+            ctr.set_up([0.0, 0.0, 1.0])
+            ctr.set_zoom(0.3)
         else:
-            # 点数不变，update_geometry 走快速路径
             pcd.points = o3d.utility.Vector3dVector(cloud_buf)
             pcd.colors = o3d.utility.Vector3dVector(color_buf)
             vis.update_geometry(pcd)
         vis.update_renderer()
         vis.poll_events()
+        
+        # 更新雷达坐标系：雷达轴方向 = to_world 映射 + 舵机旋转
+        # to_world: x←z, y←y, z←-x，即雷达x→世界-z, 雷达y→世界y, 雷达z→世界x
+        axis_len = 0.5
+        tw = _INSTALL.to_world_matrix()  # 行=雷达轴在世界系的方向（未旋转时）
+        r_theta = rotation_matrix(args.axis, angle)
+        
+        # 三个轴在世界坐标系中的方向（随舵机旋转）
+        x_world = tw[0] @ r_theta.T  # 雷达x → 世界-z
+        y_world = tw[1] @ r_theta.T  # 雷达y → 世界y
+        z_world = tw[2] @ r_theta.T  # 雷达z → 世界x
+        
+        # 光心位置（雷达系原点+偏心 → 世界系，随舵机旋转）
+        lidar_center = np.array([0.0, args.offset_y, args.offset_z]) @ tw @ r_theta.T
+        
+        # 设置 LineSet 顶点：原点 + 三个轴端点
+        pts = np.array([
+            lidar_center, lidar_center + x_world * axis_len,
+            lidar_center, lidar_center + y_world * axis_len,
+            lidar_center, lidar_center + z_world * axis_len,
+        ])
+        lidar_frame_lines.points = o3d.utility.Vector3dVector(pts)
+        vis.update_geometry(lidar_frame_lines)
 
     try:
         if args.continuous:
@@ -475,22 +529,30 @@ def main() -> None:
 
             # 按抽帧间隔生成时间点序列，取时间戳最近帧
             t = 0.0
+            frame_idx = 0
             while t <= total_s:
                 idx = pick_frame_index(rec_ts, t)
                 scan = rec_frames[idx]
                 # 角度按时间比例映射（匀速转动下 = 位置映射）
                 frac = t / total_s if total_s > 0 else 0.0
                 angle = frac * SERVO_ANGLE_RANGE
-                process_frame(scan, angle, f"t={rec_ts[idx]:.1f}s")
+                process_frame(scan, angle, f"t={rec_ts[idx]:.1f}s", frame_idx)
                 t += sample_interval
+                frame_idx += 1
         else:
-            for pos in positions:
+            for i, pos in enumerate(positions):
                 cmd = f"#{args.servo_id:03d}P{pos:04d}T{args.move_time}!"
                 print(f"[servo] {cmd}")
                 if ser:
                     ser.write(cmd.encode())
                     ser.flush()
-                time.sleep(args.interval)
+                # 等待时间 = 舵机移动时间(move_time) + 采集等待时间(interval)
+                # move_time: 舵机从当前位置移动到目标位置所需时间(ms)
+                # interval: 舵机到位后等待雷达采集数据的时间(s)
+                time.sleep(args.move_time / 1000.0 + args.interval)
+
+                # 清空 UDP 缓冲区，丢弃舵机移动期间积累的旧数据，确保接收的是当前位置的新数据
+                lidar.clear_buffer()
 
                 scan = lidar.receive_scan()
                 if scan is None or not scan:
@@ -498,7 +560,7 @@ def main() -> None:
                     continue
 
                 angle = servo_pos_to_angle(pos)
-                process_frame(scan, angle, f"pos={pos}")
+                process_frame(scan, angle, f"pos={pos}", i)
 
         print(f"\n扫描完成: 累计 {total_points} 点")
 
@@ -533,7 +595,16 @@ def main() -> None:
             vis.update_renderer()
             time.sleep(0.02)
     except KeyboardInterrupt:
-        print("\n用户中断, 退出")
+        print("\n用户中断, 保存已扫描的内容...")
+        # Ctrl+C 时保存已扫描的内容
+        if args.save_dir and total_points > 0:
+            valid = cloud_buf[:total_points]
+            saved = save_cloud(valid, args.save_dir, "ply")
+            print(f"[save] 已保存 {total_points} 点到 {args.save_dir}")
+            for kind, path in saved.items():
+                print(f"  {kind}: {path}")
+        else:
+            print(f"[save] 未保存（save_dir 为空或无数据）")
     finally:
         if ser:
             ser.close()
