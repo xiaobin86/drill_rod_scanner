@@ -179,6 +179,27 @@ class LakiBeamViewer:
         print(f"已绑定 UDP {self.host_ip}:{self.port}，等待 LakiBeam 数据...")
         print("提示: 确保雷达已启动测距（Web 配置页 laser_enable=True），且向本机端口发送数据")
 
+    def clear_buffer(self) -> int:
+        """清空 UDP 接收缓冲区，返回丢弃的数据包数量。"""
+        if self.sock is None:
+            return 0
+        
+        count = 0
+        # 临时设置非阻塞模式
+        self.sock.settimeout(0.0)
+        try:
+            while True:
+                try:
+                    self.sock.recvfrom(65535)
+                    count += 1
+                except socket.error:
+                    break
+        finally:
+            # 恢复原来的超时设置
+            self.sock.settimeout(1.0)
+        
+        return count
+
     def receive_scan(self) -> list[ScanPoint] | None:
         """接收数据直到集齐一圈（方位角回绕判定），超时返回 None。
 
